@@ -40,10 +40,10 @@ def train(_):
     # min_feat = np.array(stat_file["feats_minimus"])
     with tf.Graph().as_default():
         
-        # input_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,66),name='input_placeholder')
-        # tf.summary.histogram('inputs', input_placeholder)
 
-        output_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,1),name='output_placeholder')
+        output_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,64),name='output_placeholder')
+
+        f0_output_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,1),name='f0_output_placeholder')
 
 
         f0_input_placeholder= tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len),name='f0_input_placeholder')
@@ -55,207 +55,107 @@ def train(_):
 
         rand_input_placeholder= tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len, 64),name='rand_input_placeholder')
 
-
-        # pho_input_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len, 42),name='pho_input_placeholder')
-
         prob = tf.placeholder_with_default(1.0, shape=())
         
         phoneme_labels = tf.placeholder(tf.int32, shape=(config.batch_size,config.max_phr_len),name='phoneme_placeholder')
         phone_onehot_labels = tf.one_hot(indices=tf.cast(phoneme_labels, tf.int32), depth= len(config.phonemas))
 
-        # singer_labels = tf.placeholder(tf.float32, shape=(config.batch_size),name='singer_placeholder')
-        # singer_onehot_labels = tf.one_hot(indices=tf.cast(singer_labels, tf.int32), depth=12)
 
 
-
-        # with tf.variable_scope('phone_Model') as scope:
-        #     # regularizer = tf.contrib.layers.l2_regularizer(scale=0.1)
-        #     pho_logits = modules.phone_network(input_placeholder)
-        #     pho_classes = tf.argmax(pho_logits, axis=-1)
-        #     pho_probs = tf.nn.softmax(pho_logits)
-
-        # with tf.variable_scope('Final_Model') as scope:
-        #     voc_output = modules.final_net(singer_onehot_labels, f0_input_placeholder, phone_onehot_labels)
-        #     voc_output_decoded = tf.nn.sigmoid(voc_output)
-        #     scope.reuse_variables()
-        #     voc_output_3 = modules.final_net(singer_onehot_labels, f0_input_placeholder, pho_probs)
-        #     voc_output_3_decoded = tf.nn.sigmoid(voc_output_3)
-            
-
-        # with tf.variable_scope('singer_Model') as scope:
-        #     singer_embedding, singer_logits = modules.singer_network(input_placeholder, prob)
-        #     singer_classes = tf.argmax(singer_logits, axis=-1)
-        #     singer_probs = tf.nn.softmax(singer_logits)
+        with tf.variable_scope('Generator_feats') as scope: 
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            voc_output = modules.GAN_generator(inputs)
 
 
-        with tf.variable_scope('Generator') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, rand_input_placeholder], axis = -1)
-            voc_output_2 = modules.GAN_generator(inputs)
-            # scope.reuse_variables()
-            # voc_output_2_2 = modules.GAN_generator(voc_output_3_decoded, singer_onehot_labels, phone_onehot_labels, f0_input_placeholder, rand_input_placeholder)
-
-
-        with tf.variable_scope('Discriminator') as scope: 
+        with tf.variable_scope('Discriminator_feats') as scope: 
             inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             D_real = modules.GAN_discriminator((output_placeholder-0.5)*2, inputs)
             scope.reuse_variables()
-            D_fake = modules.GAN_discriminator(voc_output_2,inputs)
-            # scope.reuse_variables()
-            # epsilon = tf.random_uniform([], 0.0, 1.0)
-            # x_hat = (output_placeholder-0.5)*2*epsilon + (1-epsilon)* voc_output_2
-            # d_hat = modules.GAN_discriminator(x_hat, singer_onehot_labels, phone_onehot_labels, f0_input_placeholder)
-            # scope.reuse_variables()
-            # D_fake_2 = modules.GAN_discriminator(voc_output_2_2, singer_onehot_labels, phone_onehot_labels, f0_input_placeholder)
-            # scope.reuse_variables()
-            # D_fake_real = modules.GAN_discriminator((voc_output_decoded-0.5)*2,singer_onehot_labels, phone_onehot_labels, f0_input_placeholder)
-        # import pdb;pdb.set_trace()
+            D_fake = modules.GAN_discriminator(voc_output,inputs)
 
+        with tf.variable_scope('Generator_f0') as scope: 
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
+            f0_output = modules.GAN_generator_f0(inputs)
+            scope.reuse_variables()
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
+            f0_output_2 = modules.GAN_generator_f0(inputs)
 
-        # Get network parameters
+        with tf.variable_scope('Discriminator_f0') as scope: 
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
+            D_real_f0 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs)
+            scope.reuse_variables()
+            D_fake_f0 = modules.GAN_discriminator_f0(f0_output,inputs)
 
-        # final_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Final_Model")
+            scope.reuse_variables()
 
-        g_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Generator")
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
+            D_real_f0_2 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs)
+            scope.reuse_variables()
+            D_fake_f0_2 = modules.GAN_discriminator_f0(f0_output_2,inputs)
 
-        d_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Discriminator")
+        g_params_feats = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Generator_feats")
 
-        # phone_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="phone_Model")
+        d_params_feats = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Discriminator_feats")
 
+        g_params_f0 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Generator_f0")
 
-
-        # Phoneme network loss and summary
-
-        # pho_weights = tf.reduce_sum(config.phonemas_weights * phone_onehot_labels, axis=-1)
-
-        # unweighted_losses = tf.nn.softmax_cross_entropy_with_logits(labels=phone_onehot_labels, logits=pho_logits)
-
-        # weighted_losses = unweighted_losses * pho_weights
-
-        # pho_loss = tf.reduce_mean(weighted_losses) 
-        # +tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels= output_placeholder, logits=voc_output_3))*0.001 
-
-        # reconstruct_loss_pho = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels = output_placeholder, logits=voc_output_decoded_gen)) *0.00001
-
-        # pho_loss+=reconstruct_loss_pho
-
-        # pho_acc = tf.metrics.accuracy(labels=phoneme_labels, predictions=pho_classes)
-
-        # pho_summary = tf.summary.scalar('pho_loss', pho_loss)
-
-        # pho_acc_summary = tf.summary.scalar('pho_accuracy', pho_acc[0])
-
-
-        # Discriminator Loss
-
-
-        # D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels = tf.ones_like(D_real) , logits=D_real+1e-12))
-        # D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels = tf.zeros_like(D_fake) , logits=D_fake+1e-12)) + tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels = tf.zeros_like(D_fake_2) , logits=D_fake_2+1e-12)) *0.5
-        # D_loss_fake_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels = tf.zeros_like(D_fake_real) , logits=D_fake_real+1e-12))
-
-        # D_loss_real = tf.reduce_mean(D_real+1e-12) 
-        # D_loss_fake = - tf.reduce_mean(D_fake+1e-12)
-        # D_loss_fake_real = - tf.reduce_mean(D_fake_real+1e-12)
-
-
-        # gradients = tf.gradients(d_hat, x_hat)[0] + 1e-6
-        # slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-        # gradient_penalty = tf.reduce_mean((slopes-1.0)**2)
-        # errD += gradient_penalty
-        # D_loss_fake_real = - tf.reduce_mean(D_fake_real)
-
-
-        # D_correct_pred = tf.equal(tf.round(tf.sigmoid(D_real)), tf.ones_like(D_real))
-
-        # D_correct_pred_fake = tf.equal(tf.round(tf.sigmoid(D_fake_real)), tf.ones_like(D_fake_real))
-
-        # D_accuracy = tf.reduce_mean(tf.cast(D_correct_pred, tf.float32))
-
-        # D_accuracy_fake = tf.reduce_mean(tf.cast(D_correct_pred_fake, tf.float32))
-
+        d_params_f0 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Discriminator_f0")
 
 
         D_loss = tf.reduce_mean(D_real +1e-12)-tf.reduce_mean(D_fake+1e-12)
-        # -tf.reduce_mean(D_fake_real+1e-12)*0.001
 
         dis_summary = tf.summary.scalar('dis_loss', D_loss)
 
-        # dis_acc_summary = tf.summary.scalar('dis_acc', D_accuracy)
+        G_loss_GAN = tf.reduce_mean(D_fake+1e-12) + tf.reduce_sum(tf.abs(output_placeholder- (voc_output/2+0.5))) *0.00005
 
-        # dis_acc_fake_summary = tf.summary.scalar('dis_acc_fake', D_accuracy_fake)
+        gen_summary = tf.summary.scalar('gen_loss', G_loss_GAN)
 
-        #Final net loss
+        D_loss_f0 = tf.reduce_mean(D_real_f0 +1e-12)-tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_mean(D_real_f0_2 +1e-12)-tf.reduce_mean(D_fake_f0_2+1e-12)
 
-        # G_loss_GAN = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels= tf.ones_like(D_real), logits=D_fake+1e-12)) + tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels= tf.ones_like(D_fake_2), logits=D_fake_2+1e-12))
-        # + tf.reduce_sum(tf.abs(output_placeholder- (voc_output_2/2+0.5))*(1-input_placeholder[:,:,-1:])) *0.00001
+        dis_summary_f0 = tf.summary.scalar('dis_loss_f0', D_loss_f0)
 
-        G_loss_GAN = tf.reduce_mean(D_fake+1e-12) + tf.reduce_sum(tf.abs(output_placeholder- (voc_output_2/2+0.5))) *0.00005
-                     # + tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels= output_placeholder, logits=voc_output)) *0.000005
-        #
-
-        # G_correct_pred = tf.equal(tf.round(tf.sigmoid(D_fake)), tf.ones_like(D_real))
-
-        # # G_correct_pred_2 = tf.equal(tf.round(tf.sigmoid(D_fake_2)), tf.ones_like(D_real))
-
-        # G_accuracy = tf.reduce_mean(tf.cast(G_correct_pred, tf.float32))
-
-        # gen_summary = tf.summary.scalar('gen_loss', G_loss_GAN)
-
-        # gen_acc_summary = tf.summary.scalar('gen_acc', G_accuracy)
-
-        # final_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels= output_placeholder, logits=voc_output)) \
-                           # +tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels= output_placeholder, logits=voc_output_3))*0.5
-
-        # reconstruct_loss = tf.reduce_sum(tf.abs(output_placeholder- (voc_output_2/2+0.5)))
+        G_loss_GAN_f0 = tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output_2/2+0.5))) *0.00005 + tf.reduce_mean(D_fake_f0_2+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output_2/2+0.5))) *0.00005
 
 
-        # final_summary = tf.summary.scalar('final_loss', final_loss)
+        gen_summary_f0 = tf.summary.scalar('gen_loss_f0', G_loss_GAN_f0)
 
         summary = tf.summary.merge_all()
 
-        # summary_val = tf.summary.merge([f0_summary_midi, pho_summary, singer_summary, reconstruct_summary, pho_acc_summary_val,  f0_acc_summary_midi_val, singer_acc_summary_val ])
 
-        # vuv_summary = tf.summary.scalar('vuv_loss', vuv_loss)
-
-        # loss_summary = tf.summary.scalar('total_loss', loss)
-
-
-        #Global steps
 
         global_step = tf.Variable(0, name='global_step', trainable=False)
 
-        # global_step_re = tf.Variable(0, name='global_step_re', trainable=False)
-
         global_step_dis = tf.Variable(0, name='global_step_dis', trainable=False)
 
-        # global_step_gen = tf.Variable(0, name='global_step_gen', trainable=False)
+        global_step_f0 = tf.Variable(0, name='global_step_f0', trainable=False)
+
+        global_step_dis_f0 = tf.Variable(0, name='global_step_dis_f0', trainable=False)
 
 
-        #Optimizers
-
-        # pho_optimizer = tf.train.AdamOptimizer(learning_rate = config.init_lr)
-
-        # re_optimizer = tf.train.AdamOptimizer(learning_rate = config.init_lr)
 
         dis_optimizer = tf.train.RMSPropOptimizer(learning_rate=5e-5)
 
         gen_optimizer = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+
+        dis_optimizer_f0 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+
+        gen_optimizer_f0 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
         # GradientDescentOptimizer
 
 
 
-        # update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
-        # Training functions
-        # pho_train_function = pho_optimizer.minimize(pho_loss, global_step = global_step, var_list = phone_params)
+        dis_train_function = dis_optimizer.minimize(D_loss, global_step = global_step_dis, var_list=d_params_feats)
 
-        # with tf.control_dependencies(update_ops):
-        # re_train_function = re_optimizer.minimize(final_loss, global_step = global_step_re, var_list=final_params)
+        gen_train_function = gen_optimizer.minimize(G_loss_GAN, global_step = global_step, var_list=g_params_feats)
 
-        dis_train_function = dis_optimizer.minimize(D_loss, global_step = global_step_dis, var_list=d_params)
+        dis_train_function_f0 = dis_optimizer.minimize(D_loss_f0, global_step = global_step_dis_f0, var_list=d_params_f0)
 
-        gen_train_function = gen_optimizer.minimize(G_loss_GAN, global_step = global_step, var_list=g_params)
+        gen_train_function_f0 = gen_optimizer.minimize(G_loss_GAN_f0, global_step = global_step, var_list=g_params_f0)
 
-        clip_discriminator_var_op = [var.assign(tf.clip_by_value(var, -0.01, 0.01)) for var in d_params]
+        clip_discriminator_var_op_feats = [var.assign(tf.clip_by_value(var, -0.01, 0.01)) for var in d_params_feats]
+
+        clip_discriminator_var_op_f0 = [var.assign(tf.clip_by_value(var, -0.01, 0.01)) for var in d_params_f0]
 
         
 
@@ -296,22 +196,10 @@ def train(_):
 
             # epoch_pho_loss = 0
             epoch_gen_loss = 0
-            # epoch_re_loss = 0
             epoch_dis_loss = 0
+            epoch_gen_loss_f0 = 0
+            epoch_dis_loss_f0 = 0
 
-            # epoch_pho_acc = 0
-            # epoch_gen_acc = 0
-            # epoch_dis_acc = 0
-            # epoch_dis_acc_fake = 0
-
-            # val_epoch_pho_loss = 0
-            # val_epoch_gen_loss = 0
-            # val_epoch_dis_loss = 0
-
-            # val_epoch_pho_acc = 0
-            # val_epoch_gen_acc = 0
-            # val_epoch_dis_acc = 0
-            # val_epoch_dis_acc_fake = 0
 
             with tf.variable_scope('Training'):
 
@@ -324,18 +212,18 @@ def train(_):
                     
 
                     for critic_itr in range(n_critic):
-                        feed_dict = {output_placeholder: feats[:,:,-2:-1], f0_input_placeholder: f0, phoneme_labels: phones, phone_context_placeholder: phones_context,
-                        f0_context_placeholder:f0_context, rand_input_placeholder: feats[:,:,:64]}
-                        sess.run(dis_train_function, feed_dict = feed_dict)
-                        sess.run(clip_discriminator_var_op, feed_dict = feed_dict)
+                        feed_dict = {f0_output_placeholder: feats[:,:,-2:-1], f0_input_placeholder: f0, phoneme_labels: phones, phone_context_placeholder: phones_context,
+                        f0_context_placeholder:f0_context, output_placeholder: feats[:,:,:64]}
+                        sess.run([dis_train_function,dis_train_function_f0], feed_dict = feed_dict)
+                        sess.run([clip_discriminator_var_op_feats, clip_discriminator_var_op_f0], feed_dict = feed_dict)
 
                     # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
                     # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
 
-                    _, step_gen_loss = sess.run([ gen_train_function, G_loss_GAN], feed_dict = feed_dict)
+                    _,_, step_gen_loss, step_gen_loss_f0 = sess.run([ gen_train_function,gen_train_function_f0, G_loss_GAN, G_loss_GAN_f0], feed_dict = feed_dict)
                     # import pdb;pdb.set_trace()
                     # if step_gen_acc>0.3:
-                    step_dis_loss = sess.run(D_loss, feed_dict = feed_dict)
+                    step_dis_loss, step_dis_loss_f0 = sess.run([D_loss, D_loss_f0], feed_dict = feed_dict)
                     # _, step_pho_loss, step_pho_acc = sess.run([pho_train_function, pho_loss, pho_acc], feed_dict= feed_dict)
                     # else: 
                         # step_dis_loss, step_dis_acc = sess.run([D_loss, D_accuracy], feed_dict = feed_dict)
@@ -344,6 +232,7 @@ def train(_):
                     # epoch_re_loss+=step_re_loss
                     epoch_gen_loss+=step_gen_loss
                     epoch_dis_loss+=step_dis_loss
+
 
                     # epoch_pho_acc+=step_pho_acc[0]
                     # epoch_gen_acc+=step_gen_acc
@@ -371,57 +260,6 @@ def train(_):
                 train_summary_writer.flush()
 
 
-            # with tf.variable_scope('Validation'):
-
-            #     for feats, f0, phos, singer_ids in val_generator:
-
-            #         pho_one_hot = one_hotize(phos, max_index=42)
-
-            #         f0 = f0.reshape([config.batch_size, config.max_phr_len, 1])
-
-            #         sing_id_shu = np.copy(singer_ids)
-
-            #         phos_shu = np.copy(phos)
-
-            #         np.random.shuffle(sing_id_shu)
-
-            #         np.random.shuffle(phos_shu)
-
-            #         feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0,rand_input_placeholder: np.random.uniform(-1.0,1.0,size=[30,config.max_phr_len,4]),
-            #         phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
-
-            #         step_pho_loss, step_pho_acc = sess.run([pho_loss, pho_acc], feed_dict= feed_dict)
-            #         step_gen_loss, step_gen_acc = sess.run([final_loss, G_accuracy], feed_dict = feed_dict)
-            #         step_dis_loss, step_dis_acc, step_dis_acc_fake = sess.run([D_loss, D_accuracy, D_accuracy_fake], feed_dict = feed_dict)
-
-            #         val_epoch_pho_loss+=step_pho_loss
-            #         val_epoch_gen_loss+=step_gen_loss
-            #         val_epoch_dis_loss+=step_dis_loss
-
-            #         val_epoch_pho_acc+=step_pho_acc[0]
-            #         val_epoch_gen_acc+=step_gen_acc
-            #         val_epoch_dis_acc+=step_dis_acc
-            #         val_epoch_dis_acc_fake+=step_dis_acc_fake
-
-
-
-            #         utils.progress(batch_num,config.batches_per_epoch_train, suffix = 'training done')
-            #         batch_num+=1
-
-            #     val_epoch_pho_loss = val_epoch_pho_loss/config.batches_per_epoch_val
-            #     val_epoch_gen_loss = val_epoch_gen_loss/config.batches_per_epoch_val
-            #     val_epoch_dis_loss = val_epoch_dis_loss/config.batches_per_epoch_val
-
-            #     val_epoch_pho_acc = val_epoch_pho_acc/config.batches_per_epoch_val
-            #     val_epoch_gen_acc = val_epoch_gen_acc/config.batches_per_epoch_val
-            #     val_epoch_dis_acc = val_epoch_dis_acc/config.batches_per_epoch_val
-            #     val_epoch_dis_acc_fake = val_epoch_dis_acc_fake/config.batches_per_epoch_val
-
-            #     summary_str = sess.run(summary, feed_dict=feed_dict)
-            # # import pdb;pdb.set_trace()
-            #     val_summary_writer.add_summary(summary_str, epoch)
-            # # # summary_writer.add_summary(summary_str_val, epoch)
-            #     val_summary_writer.flush()
             duration = time.time() - start_time
 
             # np.save('./ikala_eval/accuracies', f0_accs)
