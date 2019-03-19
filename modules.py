@@ -5,7 +5,7 @@
 The modules to be used in the final model.
 """
 
-def encoder_decoder(singer_label, phones, f0_notation, rand):
+def GAN_generator(singer_label, phones, f0_notation, rand):
 
     singer_label = tf.reshape(tf.layers.dense(singer_label, config.wavenet_filters, name = "g_condi"), [config.batch_size,1,1,-1], name = "g_condi_reshape")
 
@@ -16,7 +16,7 @@ def encoder_decoder(singer_label, phones, f0_notation, rand):
 
     # # conds = tf.concat([phones, f0_notation], axis = -1)
 
-    # # conds = tf.layers.dense(conds, config.wavenet_filters, name = "G_conds")    
+    # # conds = tf.layers.dense(conds, config.wavenet_filters, name = "G_conds")
 
     inputs = tf.concat([phones, f0_notation, singer_label, rand], axis = -1)
 
@@ -37,34 +37,34 @@ def encoder_decoder(singer_label, phones, f0_notation, rand):
 
     conv8 = tf.nn.relu(tf.layers.conv2d(conv7, 512, (3,1), strides=(2,1),  padding = 'same', name = "G_8", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
-    deconv1 = tf.image.resize_image_with_pad(conv8, 8,1, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv1 = tf.image.resize_images(conv8, size=(8,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
     deconv1 = tf.nn.relu(tf.layers.conv2d(deconv1, 512, (3,1), strides=(1,1),  padding = 'same', name = "G_dec1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     deconv1 = tf.concat([deconv1, conv7], axis = -1)
 
-    deconv2 = tf.image.resize_image_with_pad(deconv1, 16,1, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv2 = tf.image.resize_images(deconv1, size=(16,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
     deconv2 = tf.nn.relu(tf.layers.conv2d(deconv2, 256, (3,1), strides=(1,1),  padding = 'same', name = "G_dec2", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     deconv2 = tf.concat([deconv2, conv6], axis = -1)
 
 
-    deconv3 = tf.image.resize_image_with_pad(deconv2, 32,1, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv3 = tf.image.resize_images(deconv2, size=(32,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
     deconv3 = tf.nn.relu(tf.layers.conv2d(deconv3, 128, (3,1), strides=(1,1),  padding = 'same', name = "G_dec3", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     deconv3 = tf.concat([deconv3, conv5], axis = -1)
 
 
-    deconv4 = tf.image.resize_image_with_pad(deconv3, 64,1, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv4 = tf.image.resize_images(deconv3, size=(64,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
     deconv4 = tf.nn.relu(tf.layers.conv2d(deconv4, 64, (3,1), strides=(1,1),  padding = 'same', name = "G_dec4", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     deconv4 = tf.concat([deconv4, conv1], axis = -1)
 
 
-    deconv5 = tf.image.resize_image_with_pad(deconv4, 128,1, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv5 = tf.image.resize_images(deconv4, size=(128,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
     deconv5 = tf.nn.relu(tf.layers.conv2d(deconv5, 64, (3,1), strides=(1,1),  padding = 'same', name = "G_dec5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
@@ -89,5 +89,51 @@ def encoder_decoder(singer_label, phones, f0_notation, rand):
 
 
     output = tf.reshape(output, [config.batch_size, config.max_phr_len, -1])
+
+    return output
+
+
+def GAN_discriminator(inputs, singer_label, phones, f0_notation):
+
+    # inputs = tf.concat([inputs, conds], axis = -1)
+
+    singer_label = tf.reshape(tf.layers.dense(singer_label, config.wavenet_filters, name = "d_condi"), [config.batch_size,1,1,-1], name = "d_condi_reshape")
+
+    phones = tf.layers.dense(phones, config.wavenet_filters, name = "D_phone", kernel_initializer=tf.random_normal_initializer(stddev=0.02))
+
+    f0_notation = tf.layers.dense(f0_notation, config.wavenet_filters, name = "D_f0", kernel_initializer=tf.random_normal_initializer(stddev=0.02))
+    singer_label = tf.tile(tf.reshape(singer_label,[config.batch_size,1,-1]),[1,config.max_phr_len,1])
+
+    # # conds = tf.concat([phones, f0_notation], axis = -1)
+
+    # # conds = tf.layers.dense(conds, config.wavenet_filters, name = "G_conds")
+
+    inputs = tf.concat([phones, f0_notation, singer_label, inputs], axis = -1)
+
+    prenet_out = selu(tf.layers.dense(inputs, config.lstm_size*2, name = "d_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    prenet_out = selu(tf.layers.dense(prenet_out, config.lstm_size, name = "d_2",kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    num_block = config.wavenet_layers
+    receptive_field = 2**num_block
+
+    first_conv = tf.layers.conv1d(prenet_out, config.wavenet_filters, 1, name = "d_3")
+    skips = []
+    skip, residual = nr_wavenet_block(first_conv, dilation_rate=1, name = "nr_wavenet_block_0")
+    output = skip
+    for i in range(num_block):
+        skip, residual = nr_wavenet_block(residual, dilation_rate=2**(i+1), name = "nr_wavenet_block_"+str(i+1))
+        skips.append(skip)
+    for skip in skips:
+        output+=skip
+    output = output+first_conv
+
+    output = tf.nn.relu(output)
+
+    output = tf.layers.conv1d(output,config.wavenet_filters,1, kernel_initializer=tf.random_normal_initializer(stddev=0.02), name = "d_4")
+
+    output = selu(output)
+
+    output = tf.layers.conv1d(output,1,1, kernel_initializer=tf.random_normal_initializer(stddev=0.02), name = "d_5")
+
+    output = selu(output)
 
     return output

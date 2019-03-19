@@ -7,7 +7,7 @@ import sys
 import h5py
 import pyworld as pw
 from reduce import sp_to_mfsc, mfsc_to_sp, ap_to_wbap,wbap_to_ap, get_warped_freqs, sp_to_mgc, mgc_to_sp, mgc_to_mfsc, mfsc_to_mgc
-
+from scipy.ndimage import filters
 
 import config
 import utils
@@ -15,7 +15,12 @@ import utils
 import librosa
 
 
-
+def grid_to_bins(grid, start_bin_val, end_bin_val):
+    """Compute the bin numbers from a given grid
+    """
+    bin_centers = (grid[1:] + grid[:-1])/2.0
+    bins = np.concatenate([[start_bin_val], bin_centers, [end_bin_val]])
+    return bins
 
 
 def get_hcqt(audio):
@@ -36,7 +41,28 @@ def get_hcqt(audio):
     return log_hcqt
 
 
+def process_f0(f0, f_bins, n_freqs):
+    freqz = np.zeros((f0.shape[0], f_bins.shape[0]))
 
+    haha = np.digitize(f0, f_bins) - 1
+
+    idx2 = haha < n_freqs
+
+    haha = haha[idx2]
+
+    freqz[range(len(haha)), haha] = 1
+
+    atb = filters.gaussian_filter1d(freqz.T, 1, axis=0, mode='constant').T
+
+    min_target = np.min(atb[range(len(haha)), haha])
+
+    atb = atb / min_target
+
+    # import pdb;pdb.set_trace()
+
+    atb[atb > 1] = 1
+
+    return atb
 
 def get_world_feats(vocals):
     feats=pw.wav2world(vocals,config.fs,frame_period= config.hoptime*1000)
@@ -85,8 +111,8 @@ def get_feats(audio):
 
     cqt = librosa.core.cqt(audio, sr = config.fs, hop_length = config.hopsize, n_bins = config.cqt_bins, fmin = config.fmin, bins_per_octave = config.bins_per_octave).T
 
-    hcqt = get_hcqt(audio)
+    # hcqt = get_hcqt(audio)
 
-    hcqt = np.swapaxes(hcqt, 0,1)
+    # hcqt = np.swapaxes(hcqt, 0,1)
 
-    return stft, cqt, hcqt
+    return stft, cqt
