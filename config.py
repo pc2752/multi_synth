@@ -9,7 +9,8 @@ wav_dir = '../apps/datasets/import_files/nitech_jp_song_f001/'
 voice_dir = './voice/'
 backing_dir = './backing/'
 # log_dir = './log_f0_npss/'
-log_dir = './log_f0_npss_full/'
+log_dir = './log_f0_npss_full_2/'
+# 3 for just G1 output with uv, 2 for just G1 output without uv and 1 for a mixture (G1 after 1000), without numbers for both from ebeggining
 val_dir = './'
 feats_dir = './feats/'
 
@@ -48,7 +49,7 @@ harmonics = [0.5, 1, 2, 3, 4, 5]
 
 comp_mode = 'mfsc'
 
-num_epochs = 2500
+num_epochs = 3500
 
 print_every = 1
 save_every = 10
