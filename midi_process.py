@@ -96,9 +96,24 @@ def process_notes_file(filename, stft_len):
 
     phonemes=[]
 
-    for pho in phos:
+    # prev = ['sil']
+
+    for count, pho in enumerate(phos):
         st,end,phonote=pho.split()
         note, combo = phonote.split('/p:')
+        # if combo != 'sil' and prev != 'sil':
+        #     combo = combo.split('-')
+        #     combo = prev + combo
+        #     prev = [combo[-1]]
+        #     if count >0:
+        #         phonemes[-1][-1].append(combo[1])
+        # else:
+        #     combo = ['sil']
+        #     prev = ['sil']
+        #     if count >0:
+        #         phonemes[-1][-1].append(['sil'])
+
+        
         if note == 'xx':
             note_num = 0
         else:
@@ -109,9 +124,10 @@ def process_notes_file(filename, stft_len):
         # if phonote=='pau' or phonote=='br':
         #     phonote='sil'
         phonemes.append([st,en,note_num, combo])
+    # import pdb;pdb.set_trace()
 
     strings_p = np.zeros((phonemes[-1][1],2))
-    strings_c = np.zeros((phonemes[-1][1],6))
+    strings_c = np.zeros((phonemes[-1][1],4))
 
     for i in range(len(phonemes)):
         pho=phonemes[i]
@@ -120,6 +136,6 @@ def process_notes_file(filename, stft_len):
         context = np.linspace(0.0,1.0, len(strings_p[pho[0]:pho[1]+1,0]))
         strings_p[pho[0]:pho[1]+1] = value
         for j, p in enumerate(pho[3].split('-')):
-            strings_c[pho[0]:pho[1] + 1, j+1] = config.phonemas.index(p)+1
+            strings_c[pho[0]:pho[1] + 1, j] = config.phonemas.index(p)+1
         strings_p[pho[0]:pho[1]+1,1] = context
-    return strings_p, strings_c.reshape(-1,6)
+    return strings_p, strings_c.reshape(-1,4)

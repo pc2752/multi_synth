@@ -111,7 +111,8 @@ def train(_):
 
         dis_summary = tf.summary.scalar('dis_loss', D_loss)
 
-        G_loss_GAN = tf.reduce_mean(D_fake+1e-12) + tf.reduce_sum(tf.abs(output_placeholder- (voc_output/2+0.5))) *0.00005
+        G_loss_GAN = tf.reduce_mean(D_fake+1e-12) + tf.reduce_mean(tf.squared_difference(f0_output_placeholder, (voc_output/2+0.5))) 
+        # + tf.reduce_sum(tf.abs(output_placeholder- (voc_output/2+0.5))) *0.00005
 
         gen_summary = tf.summary.scalar('gen_loss', G_loss_GAN)
 
@@ -119,12 +120,14 @@ def train(_):
 
         dis_summary_f0 = tf.summary.scalar('dis_loss_f0', D_loss_f0)
 
-        G_loss_GAN_f0 = tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output/2+0.5))) *0.00005 
+        G_loss_GAN_f0 = tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_mean(tf.squared_difference(f0_output_placeholder, (f0_output/2+0.5))) 
+        # + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output/2+0.5))) *0.00005 
         # + tf.reduce_mean(D_fake_f0_2+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output_2/2+0.5))) *0.00005
 
         D_loss_f0_2 = tf.reduce_mean(D_real_f0_2 +1e-12)-tf.reduce_mean(D_fake_f0_2+1e-12)
 
-        G_loss_GAN_f0_2 = tf.reduce_mean(D_fake_f0_2+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output_2/2+0.5))) *0.00005 
+        G_loss_GAN_f0_2 = tf.reduce_mean(D_fake_f0_2+1e-12) + tf.reduce_mean(tf.squared_difference(f0_output_placeholder, (f0_output_2/2+0.5))) 
+        # + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output_2/2+0.5))) *0.00005 
 
 
         gen_summary_f0 = tf.summary.scalar('gen_loss_f0', G_loss_GAN_f0)
