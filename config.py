@@ -52,7 +52,7 @@ comp_mode = 'mfsc'
 num_epochs = 3500
 
 print_every = 1
-save_every = 10
+save_every = 500
 
 batches_per_epoch_train = 100
 batches_per_epoch_val = 10
