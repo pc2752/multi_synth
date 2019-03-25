@@ -64,39 +64,44 @@ def train(_):
 
 
 
-        with tf.variable_scope('Generator_feats') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
-            voc_output = modules.GAN_generator(inputs)
 
-
-        with tf.variable_scope('Discriminator_feats') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
-            D_real = modules.GAN_discriminator((output_placeholder-0.5)*2, inputs)
-            scope.reuse_variables()
-            D_fake = modules.GAN_discriminator(voc_output,inputs)
 
         with tf.variable_scope('Generator_f0') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             # inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
             f0_output = modules.GAN_generator_f0(inputs)
 
-            scope.reuse_variables()
 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
-            f0_output_2 = modules.GAN_generator_f0(inputs)
 
         with tf.variable_scope('Discriminator_f0') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             D_real_f0 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs)
             scope.reuse_variables()
             D_fake_f0 = modules.GAN_discriminator_f0(f0_output,inputs)
 
+
+
+        with tf.variable_scope('Generator_feats') as scope: 
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, f0_output_placeholder], axis = -1)
+            voc_output = modules.GAN_generator(inputs)
+            
             scope.reuse_variables()
 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
-            D_real_f0_2 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (f0_output/2)+0.5], axis = -1)
+            voc_output_2 = modules.GAN_generator(inputs)
+
+        with tf.variable_scope('Discriminator_feats') as scope: 
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, f0_output_placeholder], axis = -1)
+            D_real = modules.GAN_discriminator((output_placeholder-0.5)*2, inputs)
             scope.reuse_variables()
-            D_fake_f0_2 = modules.GAN_discriminator_f0(f0_output_2,inputs)
+            D_fake = modules.GAN_discriminator(voc_output,inputs)
+
+            scope.reuse_variables()
+
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (f0_output/2)+0.5], axis = -1)
+            D_real_2 = modules.GAN_discriminator((output_placeholder-0.5)*2, inputs)
+            scope.reuse_variables()
+            D_fake_2 = modules.GAN_discriminator(voc_output_2,inputs)
 
         g_params_feats = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Generator_feats")
 
@@ -111,8 +116,9 @@ def train(_):
 
         dis_summary = tf.summary.scalar('dis_loss', D_loss)
 
-        G_loss_GAN = tf.reduce_mean(D_fake+1e-12) + tf.reduce_mean(tf.squared_difference(f0_output_placeholder, (voc_output/2+0.5))) 
-        # + tf.reduce_sum(tf.abs(output_placeholder- (voc_output/2+0.5))) *0.00005
+        G_loss_GAN = tf.reduce_mean(D_fake+1e-12) + tf.reduce_sum(tf.abs(output_placeholder- (voc_output/2+0.5))) *0.00005
+        # + tf.reduce_mean(tf.squared_difference(f0_output_placeholder, (voc_output/2+0.5))) 
+        # 
 
         gen_summary = tf.summary.scalar('gen_loss', G_loss_GAN)
 
@@ -120,14 +126,16 @@ def train(_):
 
         dis_summary_f0 = tf.summary.scalar('dis_loss_f0', D_loss_f0)
 
-        G_loss_GAN_f0 = tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_mean(tf.squared_difference(f0_output_placeholder, (f0_output/2+0.5))) 
-        # + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output/2+0.5))) *0.00005 
+        G_loss_GAN_f0 = tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output/2+0.5))) *0.00005
+        # + tf.reduce_mean(tf.squared_difference(f0_output_placeholder, (f0_output/2+0.5))) 
+        #  
         # + tf.reduce_mean(D_fake_f0_2+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output_2/2+0.5))) *0.00005
 
-        D_loss_f0_2 = tf.reduce_mean(D_real_f0_2 +1e-12)-tf.reduce_mean(D_fake_f0_2+1e-12)
+        D_loss_2 = tf.reduce_mean(D_real_2 + 1e-12)-tf.reduce_mean(D_fake_2+1e-12)
 
-        G_loss_GAN_f0_2 = tf.reduce_mean(D_fake_f0_2+1e-12) + tf.reduce_mean(tf.squared_difference(f0_output_placeholder, (f0_output_2/2+0.5))) 
-        # + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output_2/2+0.5))) *0.00005 
+        G_loss_GAN_2 = tf.reduce_mean(D_fake_2+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (voc_output_2/2+0.5))) *0.00005 
+        # + tf.reduce_mean(tf.squared_difference(output_placeholder, (voc_output_2/2+0.5))) 
+        # 
 
 
         gen_summary_f0 = tf.summary.scalar('gen_loss_f0', G_loss_GAN_f0)
@@ -145,9 +153,9 @@ def train(_):
         global_step_dis_f0 = tf.Variable(0, name='global_step_dis_f0', trainable=False)
 
 
-        global_step_f0_2 = tf.Variable(0, name='global_step_f0_2', trainable=False)
+        global_step_2 = tf.Variable(0, name='global_step_2', trainable=False)
 
-        global_step_dis_f0_2 = tf.Variable(0, name='global_step_dis_f0_2', trainable=False)
+        global_step_dis_2 = tf.Variable(0, name='global_step_dis_f0_2', trainable=False)
 
 
 
@@ -159,9 +167,9 @@ def train(_):
 
         gen_optimizer_f0 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
 
-        dis_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+        dis_optimizer_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
 
-        gen_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+        gen_optimizer_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
         # GradientDescentOptimizer
 
 
@@ -175,9 +183,9 @@ def train(_):
 
         gen_train_function_f0 = gen_optimizer.minimize(G_loss_GAN_f0, global_step = global_step_f0, var_list=g_params_f0)
 
-        dis_train_function_f0_2 = dis_optimizer.minimize(D_loss_f0_2, global_step = global_step_dis_f0_2, var_list=d_params_f0)
+        dis_train_function_2 = dis_optimizer.minimize(D_loss_2, global_step = global_step_dis_2, var_list=d_params_feats)
 
-        gen_train_function_f0_2 = gen_optimizer.minimize(G_loss_GAN_f0_2, global_step = global_step_f0_2, var_list=g_params_f0)
+        gen_train_function_2 = gen_optimizer.minimize(G_loss_GAN_2, global_step = global_step_2, var_list=g_params_feats)
 
         clip_discriminator_var_op_feats = [var.assign(tf.clip_by_value(var, -0.01, 0.01)) for var in d_params_feats]
 
@@ -269,16 +277,16 @@ def train(_):
 
                     if epoch > 1000:
                         for critic_itr in range(n_critic_f0):
-                            sess.run(dis_train_function_f0_2, feed_dict = feed_dict)
-                            sess.run(clip_discriminator_var_op_f0, feed_dict = feed_dict)
+                            sess.run(dis_train_function_2, feed_dict = feed_dict)
+                            sess.run(clip_discriminator_var_op_feats, feed_dict = feed_dict)
 
                     # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
                     # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
 
-                        _, step_gen_loss_f0_2 = sess.run([ gen_train_function_f0_2, G_loss_GAN_f0_2], feed_dict = feed_dict)
+                        _, step_gen_loss_2 = sess.run([ gen_train_function_2, G_loss_GAN_2], feed_dict = feed_dict)
                         # import pdb;pdb.set_trace()
                         # if step_gen_acc>0.3:
-                        step_dis_loss_f0_2 = sess.run(D_loss_f0_2, feed_dict = feed_dict)  
+                        step_dis_loss_2 = sess.run(D_loss_2, feed_dict = feed_dict)  
 
                       
                     # _, step_pho_loss, step_pho_acc = sess.run([pho_train_function, pho_loss, pho_acc], feed_dict= feed_dict)
@@ -372,17 +380,19 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
 
 
-        with tf.variable_scope('Generator_feats') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
-            voc_output = modules.GAN_generator(inputs)
-
-
         with tf.variable_scope('Generator_f0') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            # inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
             f0_output = modules.GAN_generator_f0(inputs)
+
+        with tf.variable_scope('Generator_feats') as scope: 
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, f0_output_placeholder], axis = -1)
+            voc_output = modules.GAN_generator(inputs)
+            
             scope.reuse_variables()
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
-            f0_output_2 = modules.GAN_generator_f0(inputs)
+
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (f0_output/2)+0.5], axis = -1)
+            voc_output_2 = modules.GAN_generator(inputs)
 
 
         saver = tf.train.Saver(max_to_keep= config.max_models_to_keep)
@@ -454,7 +464,7 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
 
 
-            output_feats_gan, output_f0 = sess.run([voc_output, f0_output] , feed_dict = feed_dict)
+            output_feats_gan, output_f0 = sess.run([voc_output_2, f0_output] , feed_dict = feed_dict)
 
 
             out_batches_feats.append(output_feats_gan /2 +0.5)
