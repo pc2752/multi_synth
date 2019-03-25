@@ -267,7 +267,7 @@ def train(_):
                     if epoch > 1000:
                         for critic_itr in range(n_critic_f0):
                             sess.run(dis_train_function_f0_2, feed_dict = feed_dict)
-                            sess.run(clip_discriminator_var_op_f0_2, feed_dict = feed_dict)
+                            sess.run(clip_discriminator_var_op_f0, feed_dict = feed_dict)
 
                     # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
                     # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
@@ -428,7 +428,7 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
         in_batches_feat, kaka = utils.generate_overlapadd(feats)
 
-        # import pdb;pdb.set_trace()
+        noters = np.expand_dims(np.array([config.notes[int(x)] for x in notes[:,0]]),1)
 
 
 
@@ -483,9 +483,22 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
         out_batches_f0= out_batches_f0[:len(feats)]
 
+        diff_1 = (out_batches_f0-noters)*(1-feats[:,-1:])
+
+        diff_2 = (feats[:,-2:-1]-noters)*(1-feats[:,-1:])
+
+        print("Mean predicted note deviation {}".format(diff_1.mean()))
+        print("Mean original note deviation {}".format(diff_2.mean()))
+        
+        print("STD predicted note deviation {}".format(diff_1.std()))
+        print("STD original note deviation {}".format(diff_2.std()))
+
         plt.figure(1)
+        plt.suptitle("F0 contour")
         plt.plot(out_batches_f0, label = 'Predicted F0')
         plt.plot(feats[:,-2], label = "Ground Truth F0")
+        plt.plot(noters, label = "Input Midi Note")
+        # plt.plot(phones[:,])
         plt.legend()
 
         plt.figure(2)
@@ -511,6 +524,7 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
         # out_batches_feats_gan= out_batches_feats_gan[:len(feats)]
 
         first_op = np.concatenate([out_batches_feats,out_batches_f0, feats[:,-1:] ], axis = -1)
+        second_op = np.concatenate([feats[:,60:64],out_batches_f0, feats[:,-1:] ], axis = -1)
 
         # pho_op = np.concatenate([out_batches_feats_1,feats[:,-2:]], axis = -1)
 
@@ -523,71 +537,12 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
         # pho_op = np.ascontiguousarray(pho_op)
 
         first_op = np.ascontiguousarray(first_op)
+        second_op = np.ascontiguousarray(second_op)
 
-
-
-        # if show_plots:
-
-        #     plt.figure(1)
-
-        #     ax1 = plt.subplot(311)
-
-        #     plt.imshow(feats[:,:60].T,aspect='auto',origin='lower')
-
-        #     ax1.set_title("Ground Truth Vocoder Features", fontsize=10)
-
-        #     ax2 = plt.subplot(312, sharex = ax1, sharey = ax1)
-
-        #     plt.imshow(out_batches_feats[:,:60].T,aspect='auto',origin='lower')
-
-        #     ax2.set_title("Cross Entropy Output Vocoder Features", fontsize=10)
-
-        #     ax3 =plt.subplot(313, sharex = ax1, sharey = ax1)
-
-        #     ax3.set_title("GAN Vocoder Output Features", fontsize=10)
-
-        #     # plt.imshow(out_batches_feats_1[:,:60].T,aspect='auto',origin='lower')
-        #     #
-        #     # plt.subplot(414, sharex = ax1, sharey = ax1)
-
-        #     plt.imshow(out_batches_feats_gan[:,:60].T,aspect='auto',origin='lower')
-
-        #     plt.figure(2)
-
-        #     plt.subplot(211)
-
-        #     plt.imshow(feats[:,60:-2].T,aspect='auto',origin='lower')
-
-        #     plt.subplot(212)
-
-        #     plt.imshow(out_batches_feats[:,-4:].T,aspect='auto',origin='lower')
-
-        #     plt.show()
-
-        #     save_file = input("Which files to synthesise G for GAN, B for Binary Entropy, "
-        #                       "O for original, or any combination. Default is None").upper() or "N"
-
-        # else:
-        #     save_file = input("Which files to synthesise G for GAN, B for Binary Entropy, "
-        #                   "O for original, or any combination. Default is all (GBO)").upper() or "GBO"
-
-        # if "G" in save_file:
-
-        #     utils.feats_to_audio(gan_op[:,:],file_name[:-4]+'gan_op.wav')
-
-        #     print("GAN file saved to {}".format(os.path.join(config.val_dir,file_name[:-4]+'gan_op.wav' )))
-
-        # if "O" in save_file:
-
-        #     utils.feats_to_audio(feats[:, :], file_name[:-4]+'ori_op.wav')
-
-        #     print("Originl file, resynthesized via WORLD vocoder saved to {}".format(os.path.join(config.val_dir, file_name[:-4] + 'ori_op.wav')))
-            #
-        # if "B" in save_file:
-            # # utils.feats_to_audio(pho_op[:5000,:],file_name[:-4]+'phoop.wav')
-            #
-        utils.feats_to_audio(first_op ,file_name[:-4]+'_gan_op.wav')
-        print("Binar cross entropy file saved to {}".format(os.path.join(config.val_dir, file_name[:-4] + 'bce_op.wav')))
+        utils.feats_to_audio(first_op ,file_name[:-4]+'_gan_op')
+        print("Full output saved to {}".format(os.path.join(config.val_dir, file_name[:-4] + '_gan_op.wav')))
+        utils.feats_to_audio(first_op ,file_name[:-4]+'_F0_op')
+        print("Only F0 saved to {}".format(os.path.join(config.val_dir, file_name[:-4] + '_F0_op.wav')))
 
 
         # utils.query_yes_no("Anything Else or Exit?")

@@ -111,14 +111,15 @@ def process_notes_file(filename, stft_len):
         phonemes.append([st,en,note_num, combo])
 
     strings_p = np.zeros((phonemes[-1][1],2))
-    strings_c = np.zeros(phonemes[-1][1])
+    strings_c = np.zeros((phonemes[-1][1],6))
 
     for i in range(len(phonemes)):
         pho=phonemes[i]
         value = config.notes.index(pho[2])
-        comb_val = config.combs.index(pho[3])
+        
         context = np.linspace(0.0,1.0, len(strings_p[pho[0]:pho[1]+1,0]))
         strings_p[pho[0]:pho[1]+1] = value
-        strings_c[pho[0]:pho[1] + 1] = comb_val
+        for j, p in enumerate(pho[3].split('-')):
+            strings_c[pho[0]:pho[1] + 1, j+1] = config.phonemas.index(p)+1
         strings_p[pho[0]:pho[1]+1,1] = context
-    return strings_p, strings_c.reshape(-1,1)
+    return strings_p, strings_c.reshape(-1,6)
