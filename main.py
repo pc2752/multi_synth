@@ -392,10 +392,10 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
-        with tf.control_dependencies(update_ops):
-            voc_output = tf.identity(voc_output)
-            f0_output = tf.identity(f0_output)
-            f0_output_2 = tf.identity(f0_output_2)
+#        with tf.control_dependencies(update_ops):
+#            voc_output = tf.identity(voc_output)
+#            f0_output = tf.identity(f0_output)
+#            f0_output_2 = tf.identity(f0_output_2)
 
 
         init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
