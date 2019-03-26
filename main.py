@@ -371,22 +371,31 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
         phoneme_labels = tf.placeholder(tf.int32, shape=(config.batch_size,config.max_phr_len),name='phoneme_placeholder')
         phone_onehot_labels = tf.one_hot(indices=tf.cast(phoneme_labels, tf.int32), depth= len(config.phonemas))
 
+        is_train = tf.placeholder_with_default(False, (), 'is_training')
+
 
 
         with tf.variable_scope('Generator_feats') as scope: 
             inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
-            voc_output = modules.GAN_generator(inputs)
+            voc_output = modules.GAN_generator(inputs, is_train)
 
 
         with tf.variable_scope('Generator_f0') as scope: 
             inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
-            f0_output = modules.GAN_generator_f0(inputs)
+            f0_output = modules.GAN_generator_f0(inputs, is_train)
             scope.reuse_variables()
             inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
-            f0_output_2 = modules.GAN_generator_f0(inputs)
+            f0_output_2 = modules.GAN_generator_f0(inputs, is_train)
 
 
         saver = tf.train.Saver(max_to_keep= config.max_models_to_keep)
+
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+
+        with tf.control_dependencies(update_ops):
+            voc_output = tf.identity(voc_output)
+            f0_output = tf.identity(f0_output)
+            f0_output_2 = tf.identity(f0_output_2)
 
 
         init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())

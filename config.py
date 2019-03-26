@@ -49,7 +49,7 @@ harmonics = [0.5, 1, 2, 3, 4, 5]
 
 comp_mode = 'mfsc'
 
-num_epochs = 3500
+num_epochs = 2000
 
 print_every = 1
 save_every = 10
