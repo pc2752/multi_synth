@@ -98,9 +98,26 @@ def train(_):
             scope.reuse_variables()
             D_fake_f0_2 = modules.GAN_discriminator_f0(f0_output_2,inputs)
 
+
+        with tf.variable_scope('Generator_feats_2') as scope: 
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, f0_output_placeholder], axis = -1)
+            voc_output_2 = modules.GAN_generator(inputs)
+
+
+        with tf.variable_scope('Discriminator_feats_2') as scope: 
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, f0_output_placeholder], axis = -1)
+            D_real_2 = modules.GAN_discriminator((output_placeholder-0.5)*2, inputs)
+            scope.reuse_variables()
+            D_fake_2 = modules.GAN_discriminator(voc_output_2,inputs)
+
+
         g_params_feats = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Generator_feats")
 
         d_params_feats = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Discriminator_feats")
+
+        g_params_feats_2 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Generator_feats_2")
+
+        d_params_feats_2 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Discriminator_feats_2")
 
         g_params_f0 = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope="Generator_f0")
 
@@ -112,6 +129,12 @@ def train(_):
         dis_summary = tf.summary.scalar('dis_loss', D_loss)
 
         G_loss_GAN = tf.reduce_mean(D_fake+1e-12) + tf.reduce_sum(tf.abs(output_placeholder- (voc_output/2+0.5))) *0.00005
+
+        
+        D_loss_2 = tf.reduce_mean(D_real_2 +1e-12)-tf.reduce_mean(D_fake_2+1e-12)
+
+        G_loss_GAN_2 = tf.reduce_mean(D_fake_2+1e-12) + tf.reduce_sum(tf.abs(output_placeholder- (voc_output_2/2+0.5))) *0.00005
+
 
         gen_summary = tf.summary.scalar('gen_loss', G_loss_GAN)
 
@@ -137,6 +160,11 @@ def train(_):
 
         global_step_dis = tf.Variable(0, name='global_step_dis', trainable=False)
 
+        global_step_2 = tf.Variable(0, name='global_step_2', trainable=False)
+
+        global_step_dis_2 = tf.Variable(0, name='global_step_dis_2', trainable=False)
+
+
         global_step_f0 = tf.Variable(0, name='global_step_f0', trainable=False)
 
         global_step_dis_f0 = tf.Variable(0, name='global_step_dis_f0', trainable=False)
@@ -151,6 +179,11 @@ def train(_):
         dis_optimizer = tf.train.RMSPropOptimizer(learning_rate=5e-5)
 
         gen_optimizer = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+
+        dis_optimizer_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+
+        gen_optimizer_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+
 
         dis_optimizer_f0 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
 
@@ -168,6 +201,11 @@ def train(_):
 
         gen_train_function = gen_optimizer.minimize(G_loss_GAN, global_step = global_step, var_list=g_params_feats)
 
+        dis_train_function_2 = dis_optimizer.minimize(D_loss_2, global_step = global_step_dis_2, var_list=d_params_feats_2)
+
+        gen_train_function_2 = gen_optimizer.minimize(G_loss_GAN_2, global_step = global_step_2, var_list=g_params_feats_2)
+
+
         dis_train_function_f0 = dis_optimizer.minimize(D_loss_f0, global_step = global_step_dis_f0, var_list=d_params_f0)
 
         gen_train_function_f0 = gen_optimizer.minimize(G_loss_GAN_f0, global_step = global_step_f0, var_list=g_params_f0)
@@ -177,6 +215,8 @@ def train(_):
         gen_train_function_f0_2 = gen_optimizer.minimize(G_loss_GAN_f0_2, global_step = global_step_f0_2, var_list=g_params_f0)
 
         clip_discriminator_var_op_feats = [var.assign(tf.clip_by_value(var, -0.01, 0.01)) for var in d_params_feats]
+
+        clip_discriminator_var_op_feats_2 = [var.assign(tf.clip_by_value(var, -0.01, 0.01)) for var in d_params_feats_2]
 
         clip_discriminator_var_op_f0 = [var.assign(tf.clip_by_value(var, -0.01, 0.01)) for var in d_params_f0]
 
@@ -242,22 +282,13 @@ def train(_):
 
                     for critic_itr in range(n_critic):
 
-                        sess.run(dis_train_function, feed_dict = feed_dict)
-                        sess.run(clip_discriminator_var_op_feats, feed_dict = feed_dict)
+                        sess.run([dis_train_function,dis_train_function_f0, dis_train_function_2], feed_dict = feed_dict)
+                        sess.run([clip_discriminator_var_op_feats, clip_discriminator_var_op_f0, clip_discriminator_var_op_feats_2], feed_dict = feed_dict)
 
-                    # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
-                    # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
+                    _, _, step_gen_loss = sess.run([ gen_train_function, gen_train_function_2, G_loss_GAN], feed_dict = feed_dict)
 
-                    _, step_gen_loss = sess.run([ gen_train_function, G_loss_GAN], feed_dict = feed_dict)
-                    # import pdb;pdb.set_trace()
-                    # if step_gen_acc>0.3:
                     step_dis_loss = sess.run(D_loss, feed_dict = feed_dict)
 
-                    sess.run(dis_train_function_f0, feed_dict = feed_dict)
-                    sess.run(clip_discriminator_var_op_f0, feed_dict = feed_dict)
-
-                    # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
-                    # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
 
                     _, step_gen_loss_f0 = sess.run([ gen_train_function_f0, G_loss_GAN_f0], feed_dict = feed_dict)
                     # import pdb;pdb.set_trace()
@@ -381,6 +412,9 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
             inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
             f0_output_2 = modules.GAN_generator_f0(inputs)
 
+        with tf.variable_scope('Generator_feats_2') as scope: 
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, f0_output_2], axis = -1)
+            voc_output_2 = modules.GAN_generator(inputs)
 
         saver = tf.train.Saver(max_to_keep= config.max_models_to_keep)
 
@@ -435,6 +469,8 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
         out_batches_feats = []
 
+        out_batches_feats_2 = []
+
         out_batches_f0 = []
 
 
@@ -451,10 +487,12 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
 
 
-            output_feats_gan, output_f0 = sess.run([voc_output, f0_output] , feed_dict = feed_dict)
+            output_feats_gan, output_feats_gan_2, output_f0 = sess.run([voc_output,voc_output_2, f0_output] , feed_dict = feed_dict)
 
 
             out_batches_feats.append(output_feats_gan /2 +0.5)
+            out_batches_feats_2.append(output_feats_gan_2 /2 +0.5)
+
             out_batches_f0.append(output_f0 /2 +0.5)
 
 
@@ -469,6 +507,9 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
         out_batches_feats = np.array(out_batches_feats)
         out_batches_feats = utils.overlapadd(out_batches_feats, nchunks_in) 
 
+        out_batches_feats_2 = np.array(out_batches_feats_2)
+        out_batches_feats_2 = utils.overlapadd(out_batches_feats_2, nchunks_in) 
+
         out_batches_f0= np.array(out_batches_f0)
         out_batches_f0 = utils.overlapadd(out_batches_f0, nchunks_in) 
 
@@ -478,6 +519,11 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
         out_batches_feats = out_batches_feats * (max_feat[:-2]-min_feat[:-2])+min_feat[:-2]
 
         out_batches_feats= out_batches_feats[:len(feats)]
+
+        out_batches_feats_2 = out_batches_feats_2 * (max_feat[:-2]-min_feat[:-2])+min_feat[:-2]
+
+        out_batches_feats_2 = out_batches_feats_2[:len(feats)]
+
 
         out_batches_f0 = out_batches_f0 * (max_feat[-2]-min_feat[-2])+min_feat[-2]
 
@@ -502,18 +548,24 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
         plt.legend()
 
         plt.figure(2)
-        ax1 = plt.subplot(211)
+        ax1 = plt.subplot(311)
 
         plt.imshow(feats[:,:60].T,aspect='auto',origin='lower')
 
         ax1.set_title("Ground Truth Vocoder Features", fontsize=10)
 
-        ax2 = plt.subplot(212, sharex = ax1, sharey = ax1)
+        ax2 = plt.subplot(312, sharex = ax1, sharey = ax1)
 
         plt.imshow(out_batches_feats[:,:60].T,aspect='auto',origin='lower')
 
         ax2.set_title("GAN Output Vocoder Features", fontsize=10)
 
+
+        ax3 = plt.subplot(313, sharex = ax1, sharey = ax1)
+
+        plt.imshow(out_batches_feats_2[:,:60].T,aspect='auto',origin='lower')
+
+        ax3.set_title("Second GAN Output Vocoder Features", fontsize=10)
         plt.show()
 
 
