@@ -162,9 +162,9 @@ def train(_):
 
         gen_optimizer_f0 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
 
-        dis_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+        dis_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=1e-5)
 
-        gen_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+        gen_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=1e-5)
         # GradientDescentOptimizer
 
 
@@ -253,8 +253,7 @@ def train(_):
                         sess.run(dis_train_function, feed_dict = feed_dict)
                         sess.run(clip_discriminator_var_op_feats, feed_dict = feed_dict)
 
-                        sess.run(dis_train_function_f0, feed_dict = feed_dict)
-                        sess.run(clip_discriminator_var_op_f0, feed_dict = feed_dict)
+
                     # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
                     # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
 
@@ -268,10 +267,7 @@ def train(_):
                     # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
                     # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
 
-                    _, step_gen_loss_f0 = sess.run([ gen_train_function_f0, G_loss_GAN_f0], feed_dict = feed_dict)
-                    # import pdb;pdb.set_trace()
-                    # if step_gen_acc>0.3:
-                    step_dis_loss_f0 = sess.run(D_loss_f0, feed_dict = feed_dict)  
+
 
                     if epoch > 1000:
                         for critic_itr in range(n_critic_f0):
@@ -285,7 +281,14 @@ def train(_):
                         # import pdb;pdb.set_trace()
                         # if step_gen_acc>0.3:
                         step_dis_loss_2 = sess.run(D_loss_f0_2, feed_dict = feed_dict)  
-
+                    else:
+                        for critic_itr in range(n_critic):
+                            sess.run(dis_train_function_f0, feed_dict = feed_dict)
+                            sess.run(clip_discriminator_var_op_f0, feed_dict = feed_dict)
+                        _, step_gen_loss_f0 = sess.run([ gen_train_function_f0, G_loss_GAN_f0], feed_dict = feed_dict)
+                        # import pdb;pdb.set_trace()
+                        # if step_gen_acc>0.3:
+                        step_dis_loss_f0 = sess.run(D_loss_f0, feed_dict = feed_dict)  
                       
                     # _, step_pho_loss, step_pho_acc = sess.run([pho_train_function, pho_loss, pho_acc], feed_dict= feed_dict)
                     # else: 
