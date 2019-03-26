@@ -413,7 +413,7 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
             f0_output_2 = modules.GAN_generator_f0(inputs)
 
         with tf.variable_scope('Generator_feats_2') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, f0_output_2], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, f0_output_placeholder], axis = -1)
             voc_output_2 = modules.GAN_generator(inputs)
 
         saver = tf.train.Saver(max_to_keep= config.max_models_to_keep)
@@ -483,7 +483,7 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
             phones_context = conds[:,:,1:2]
 
             feed_dict = {f0_input_placeholder: f0, phoneme_labels: phones, phone_context_placeholder: phones_context,
-                        f0_context_placeholder:f0_context,  output_placeholder: feat[:,:,:-2]}
+                        f0_context_placeholder:f0_context,  output_placeholder: feat[:,:,:-2], f0_output_placeholder: feat[:,:,-2:-1]}
 
 
 
