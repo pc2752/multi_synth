@@ -451,7 +451,7 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
 
 
-            output_feats_gan, output_f0 = sess.run([voc_output, f0_output] , feed_dict = feed_dict)
+            output_feats_gan, output_f0 = sess.run([voc_output, f0_output_2] , feed_dict = feed_dict)
 
 
             out_batches_feats.append(output_feats_gan /2 +0.5)
