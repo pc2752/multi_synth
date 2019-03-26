@@ -585,7 +585,7 @@ def GAN_discriminator(inputs, conds, is_train):
   inputs = tf.concat([conds, inputs], axis = -1)
   inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
 
-  inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
+  # inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
 
   conv1 =  tf.nn.relu(tf.layers.conv2d(inputs, 32, (3,1), strides=(2,1),  padding = 'same', name = "G_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
@@ -613,7 +613,7 @@ def GAN_discriminator_f0(inputs, conds, is_train):
   inputs = tf.concat([conds, inputs], axis = -1)
   inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
 
-  inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
+  # inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
 
   conv1 =  tf.nn.relu(tf.layers.conv2d(inputs, 32, (3,1), strides=(2,1),  padding = 'same', name = "G_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
@@ -640,7 +640,7 @@ def GAN_generator(inputs, is_train):
 
     inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
 
-    inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
+    # inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
 
     conv1 =  tf.nn.relu(tf.layers.conv2d(inputs, 32, (3,1), strides=(2,1),  padding = 'same', name = "G_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
     
@@ -717,7 +717,7 @@ def GAN_generator_f0(inputs, is_train):
 
     inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
 
-    rand = tf.layers.dense(rand, config.wavenet_filters, name = "G_rand", kernel_initializer=tf.random_normal_initializer(stddev=0.02))
+    # rand = tf.layers.dense(rand, config.wavenet_filters, name = "G_rand", kernel_initializer=tf.random_normal_initializer(stddev=0.02))
 
     conv1 =  tf.nn.relu(tf.layers.conv2d(inputs, 32, (3,1), strides=(2,1),  padding = 'same', name = "G_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
     
