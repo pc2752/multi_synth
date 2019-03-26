@@ -9,7 +9,7 @@ wav_dir = '../apps/datasets/import_files/nitech_jp_song_f001/'
 voice_dir = './voice/'
 backing_dir = './backing/'
 # log_dir = './log_f0_npss/'
-log_dir = './log_f0_npss_full_1_rev/'
+log_dir = './log_f0_npss_full_1_phase1/'
 # 3 for just G1 output with uv, 2 for just G1 output without uv and 1 for a mixture (G1 after 1000), without numbers for both from ebeggining
 val_dir = './'
 feats_dir = './feats/'
