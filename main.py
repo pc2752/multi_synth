@@ -162,9 +162,9 @@ def train(_):
 
         gen_optimizer_f0 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
 
-        dis_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=1e-5)
+        dis_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
 
-        gen_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=1e-5)
+        gen_optimizer_f0_2 = tf.train.RMSPropOptimizer(learning_rate=5e-5)
         # GradientDescentOptimizer
 
 
