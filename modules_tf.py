@@ -583,7 +583,7 @@ def nr_wavenet_block(inputs, dilation_rate = 2, name = "name"):
 def GAN_discriminator(inputs, conds):
 
     inputs = tf.concat([conds, inputs], axis = -1)
-    inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
+    # inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
 
     # inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
 
@@ -618,11 +618,11 @@ def GAN_discriminator(inputs, conds):
 def GAN_discriminator_f0(inputs, conds):
 
     inputs = tf.concat([conds, inputs], axis = -1)
-    inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
+    # inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
 
     # inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
 
-    prenet_out = selu(tf.layers.dense(inputs, wavenet_filters, name = "d_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    prenet_out = selu(tf.layers.dense(inputs, config.wavenet_filters, name = "d_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
     # prenet_out = selu(tf.layers.dense(prenet_out, config.wavenet_filters, name = "d_2",kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
     num_block = config.wavenet_layers
     receptive_field = 2**num_block
