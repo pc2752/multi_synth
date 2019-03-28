@@ -582,59 +582,73 @@ def nr_wavenet_block(inputs, dilation_rate = 2, name = "name"):
 
 def GAN_discriminator(inputs, conds):
 
-  inputs = tf.concat([conds, inputs], axis = -1)
-  inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
+    inputs = tf.concat([conds, inputs], axis = -1)
+    inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
 
-  # inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
+    # inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
 
-  conv1 =  tf.nn.relu(tf.layers.conv2d(inputs, 32, (3,1), strides=(2,1),  padding = 'same', name = "G_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    prenet_out = selu(tf.layers.dense(inputs, config.wavenet_filters, name = "d_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    # prenet_out = selu(tf.layers.dense(prenet_out, config.lstm_size, name = "d_2",kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    num_block = config.wavenet_layers
+    receptive_field = 2**num_block
 
-  # conv1 = tf.layers.batch_normalization(conv1, training=is_train, name='bn2')
+    first_conv = tf.layers.conv1d(prenet_out, config.wavenet_filters, 1, name = "d_3")
+    skips = []
+    skip, residual = nr_wavenet_block(first_conv, dilation_rate=1, name = "nr_wavenet_block_0")
+    output = skip
+    for i in range(num_block):
+        skip, residual = nr_wavenet_block(residual, dilation_rate=2**(i+1), name = "nr_wavenet_block_"+str(i+1))
+        skips.append(skip)
+    for skip in skips:
+        output+=skip
+    output = output+first_conv
 
-  conv5 =  tf.nn.relu(tf.layers.conv2d(conv1, 64, (3,1), strides=(2,1),  padding = 'same', name = "G_5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
-  # conv5 = tf.layers.batch_normalization(conv5, training=is_train, name='bn3')
+    output = tf.nn.relu(output)
 
-  conv6 =  tf.nn.relu(tf.layers.conv2d(conv5, 128, (3,1), strides=(2,1),  padding = 'same', name = "G_6", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
-  
-  # conv6 = tf.layers.batch_normalization(conv6, training=is_train, name='bn4')
-  
-  conv7 = tf.nn.relu(tf.layers.conv2d(conv6, 256, (3,1), strides=(2,1),  padding = 'same', name = "G_7", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    output = tf.layers.conv1d(output,config.wavenet_filters,1, kernel_initializer=tf.random_normal_initializer(stddev=0.02), name = "d_4")
 
-  # conv7 = tf.layers.batch_normalization(conv7, training=is_train, name='bn5')
+    output = selu(output)
 
-  conv8 = tf.nn.relu(tf.layers.conv2d(conv7, 512, (3,1), strides=(2,1),  padding = 'same', name = "G_8", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    output = tf.layers.conv1d(output,1,1, kernel_initializer=tf.random_normal_initializer(stddev=0.02), name = "d_5")
 
-  # conv8 = tf.layers.batch_normalization(conv8, training=is_train, name='bn6')
+    output = selu(output)
 
-  return conv8
+    return output
 
 def GAN_discriminator_f0(inputs, conds):
 
-  inputs = tf.concat([conds, inputs], axis = -1)
-  inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
+    inputs = tf.concat([conds, inputs], axis = -1)
+    inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
 
-  # inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
+    # inputs = tf.layers.batch_normalization(inputs, training=is_train, name='bn1')
 
-  conv1 =  tf.nn.relu(tf.layers.conv2d(inputs, 32, (3,1), strides=(2,1),  padding = 'same', name = "G_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    prenet_out = selu(tf.layers.dense(inputs, wavenet_filters, name = "d_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    # prenet_out = selu(tf.layers.dense(prenet_out, config.wavenet_filters, name = "d_2",kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    num_block = config.wavenet_layers
+    receptive_field = 2**num_block
 
-  # conv1 = tf.layers.batch_normalization(conv1, training=is_train, name='bn2')
+    first_conv = tf.layers.conv1d(prenet_out, config.wavenet_filters, 1, name = "d_3")
+    skips = []
+    skip, residual = nr_wavenet_block(first_conv, dilation_rate=1, name = "nr_wavenet_block_0")
+    output = skip
+    for i in range(num_block):
+        skip, residual = nr_wavenet_block(residual, dilation_rate=2**(i+1), name = "nr_wavenet_block_"+str(i+1))
+        skips.append(skip)
+    for skip in skips:
+        output+=skip
+    output = output+first_conv
 
-  conv5 =  tf.nn.relu(tf.layers.conv2d(conv1, 64, (3,1), strides=(2,1),  padding = 'same', name = "G_5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
-  # conv5 = tf.layers.batch_normalization(conv5, training=is_train, name='bn3')
+    output = tf.nn.relu(output)
 
-  conv6 =  tf.nn.relu(tf.layers.conv2d(conv5, 128, (3,1), strides=(2,1),  padding = 'same', name = "G_6", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
-  
-  # conv6 = tf.layers.batch_normalization(conv6, training=is_train, name='bn4')
-  
-  conv7 = tf.nn.relu(tf.layers.conv2d(conv6, 256, (3,1), strides=(2,1),  padding = 'same', name = "G_7", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    output = tf.layers.conv1d(output,config.wavenet_filters,1, kernel_initializer=tf.random_normal_initializer(stddev=0.02), name = "d_4")
 
-  # conv7 = tf.layers.batch_normalization(conv7, training=is_train, name='bn5')
+    output = selu(output)
 
-  conv8 = tf.nn.relu(tf.layers.conv2d(conv7, 512, (3,1), strides=(2,1),  padding = 'same', name = "G_8", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    output = tf.layers.conv1d(output,1,1, kernel_initializer=tf.random_normal_initializer(stddev=0.02), name = "d_5")
 
-  # conv8 = tf.layers.batch_normalization(conv8, training=is_train, name='bn6')
+    output = selu(output)
 
-  return conv8
+    return output
 
 def GAN_generator(inputs):
 
