@@ -46,8 +46,8 @@ def train(_):
         f0_output_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,1),name='f0_output_placeholder')
 
 
-        f0_input_placeholder= tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,1),name='f0_input_placeholder')
-        # f0_onehot_labels = tf.one_hot(indices=tf.cast(f0_input_placeholder, tf.int32), depth= len(config.notes))
+        f0_input_placeholder= tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len),name='f0_input_placeholder')
+        f0_onehot_labels = tf.one_hot(indices=tf.cast(f0_input_placeholder, tf.int32), depth= 31)
 
         f0_context_placeholder= tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,1),name='f0_context_placeholder')
 
@@ -67,35 +67,35 @@ def train(_):
 
 
         with tf.variable_scope('Generator_feats') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_input_placeholder, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             voc_output = modules.GAN_generator(inputs, is_train)
 
 
         with tf.variable_scope('Discriminator_feats') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_input_placeholder, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             D_real = modules.GAN_discriminator((output_placeholder-0.5)*2, inputs, is_train)
             scope.reuse_variables()
             D_fake = modules.GAN_discriminator(voc_output,inputs, is_train)
 
         with tf.variable_scope('Generator_f0') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_input_placeholder, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             # inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
             f0_output = modules.GAN_generator_f0(inputs, is_train)
 
             scope.reuse_variables()
 
-            inputs = tf.concat([phone_onehot_labels, f0_input_placeholder, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             f0_output_2 = modules.GAN_generator_f0(inputs, is_train)
 
         with tf.variable_scope('Discriminator_f0') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_input_placeholder, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             D_real_f0 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs, is_train)
             scope.reuse_variables()
             D_fake_f0 = modules.GAN_discriminator_f0(f0_output,inputs, is_train)
 
             scope.reuse_variables()
 
-            inputs = tf.concat([phone_onehot_labels, f0_input_placeholder, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             D_real_f0_2 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs, is_train)
             scope.reuse_variables()
             D_fake_f0_2 = modules.GAN_discriminator_f0(f0_output_2,inputs, is_train)
@@ -235,7 +235,7 @@ def train(_):
             with tf.variable_scope('Training'):
 
                 for feats, conds in data_generator:
-                    f0 = conds[:,:,2:3]
+                    f0 = conds[:,:,2]
                     phones = conds[:,:,0]
                     f0_context = conds[:,:,-1:]
                     phones_context = conds[:,:,1:2]
@@ -358,7 +358,7 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
 
         f0_input_placeholder= tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len),name='f0_input_placeholder')
-        f0_onehot_labels = tf.one_hot(indices=tf.cast(f0_input_placeholder, tf.int32), depth= len(config.notes))
+        f0_onehot_labels = tf.one_hot(indices=tf.cast(f0_input_placeholder, tf.int32), depth= 31)
 
         f0_context_placeholder= tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,1),name='f0_context_placeholder')
 
@@ -429,11 +429,27 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
         feats = feat_file["world_feats"][()]
 
-        feats = (feats - min_feat)/(max_feat-min_feat)
+        # feats = (feats - min_feat)/(max_feat-min_feat)
 
         phones = feat_file["phonemes"][()]
 
         notes = feat_file["notes"][()]
+
+        noters = np.expand_dims(np.array([config.notes[int(x)] for x in notes[:,0]]),1)
+
+        botes = np.array([config.notes[int(x)] for x in notes[:,0]])
+
+
+        botes = np.clip(botes - (min(config.notes[1:]) - 6), 0, None)
+
+        assert max(botes) <=30
+
+        # import pdb;pdb.set_trace()
+
+        notes[:,0] = botes
+
+
+        # notes[:,0] = botes/(max_feat[-2] +5)
 
         phones = np.concatenate([phones, notes], axis = -1)
 
@@ -444,7 +460,7 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
         in_batches_feat, kaka = utils.generate_overlapadd(feats)
 
-        noters = np.expand_dims(np.array([config.notes[int(x)] for x in notes[:,0]]),1)
+        
 
 
 
@@ -489,15 +505,16 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
         out_batches_f0 = utils.overlapadd(out_batches_f0, nchunks_in) 
 
 
-        feats = feats *(max_feat-min_feat)+min_feat
+        # feats = feats *(max_feat-min_feat)+min_feat
 
-        out_batches_feats = out_batches_feats * (max_feat[:-2]-min_feat[:-2])+min_feat[:-2]
+        # out_batches_feats = out_batches_feats * (max_feat[:-2]+5)
 
         out_batches_feats= out_batches_feats[:len(feats)]
 
-        out_batches_f0 = out_batches_f0 * (max_feat[-2]-min_feat[-2])+min_feat[-2]
+        out_batches_f0 = out_batches_f0 * (max_feat[-2]+5)
 
         out_batches_f0= out_batches_f0[:len(feats)]
+
 
         diff_1 = (out_batches_f0-noters)*(1-feats[:,-1:])
 
@@ -517,20 +534,20 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
         # plt.plot(phones[:,])
         plt.legend()
 
-        plt.figure(2)
-        ax1 = plt.subplot(211)
+        # plt.figure(2)
+        # ax1 = plt.subplot(211)
 
-        plt.imshow(feats[:,:60].T,aspect='auto',origin='lower')
+        # plt.imshow(feats[:,:60].T,aspect='auto',origin='lower')
 
-        ax1.set_title("Ground Truth Vocoder Features", fontsize=10)
+        # ax1.set_title("Ground Truth Vocoder Features", fontsize=10)
 
-        ax2 = plt.subplot(212, sharex = ax1, sharey = ax1)
+        # ax2 = plt.subplot(212, sharex = ax1, sharey = ax1)
 
-        plt.imshow(out_batches_feats[:,:60].T,aspect='auto',origin='lower')
+        # plt.imshow(out_batches_feats[:,:60].T,aspect='auto',origin='lower')
 
-        ax2.set_title("GAN Output Vocoder Features", fontsize=10)
+        # ax2.set_title("GAN Output Vocoder Features", fontsize=10)
 
-        plt.show()
+        # plt.show()
 
 
         import pdb;pdb.set_trace()
