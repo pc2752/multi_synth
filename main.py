@@ -121,7 +121,7 @@ def train(_):
 
         dis_summary_f0 = tf.summary.scalar('dis_loss_f0', D_loss_f0)
 
-        G_loss_GAN_f0 = tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output/2+0.5)))/(config.batch_size*config.max_phr_len)
+        G_loss_GAN_f0 = tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output/2+0.5)))/(config.batch_size*config.max_phr_len) * 0.01
         # + tf.reduce_mean(D_fake_f0_2+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output_2/2+0.5))) *0.00005
 
         D_loss_f0_2 = tf.reduce_mean(D_real_f0_2 +1e-12)-tf.reduce_mean(D_fake_f0_2+1e-12)
