@@ -78,24 +78,24 @@ def train(_):
             D_fake = modules.GAN_discriminator(voc_output,inputs, is_train)
 
         with tf.variable_scope('Generator_f0') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             # inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
             f0_output = modules.GAN_generator_f0(inputs, is_train)
 
             scope.reuse_variables()
 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             f0_output_2 = modules.GAN_generator_f0(inputs, is_train)
 
         with tf.variable_scope('Discriminator_f0') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             D_real_f0 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs, is_train)
             scope.reuse_variables()
             D_fake_f0 = modules.GAN_discriminator_f0(f0_output,inputs, is_train)
 
             scope.reuse_variables()
 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             D_real_f0_2 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs, is_train)
             scope.reuse_variables()
             D_fake_f0_2 = modules.GAN_discriminator_f0(f0_output_2,inputs, is_train)
@@ -121,7 +121,7 @@ def train(_):
 
         dis_summary_f0 = tf.summary.scalar('dis_loss_f0', D_loss_f0)
 
-        G_loss_GAN_f0 = tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output/2+0.5))) *0.00005 
+        G_loss_GAN_f0 = tf.reduce_mean(D_fake_f0+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output/2+0.5)))/(config.batch_size*config.max_phr_len)
         # + tf.reduce_mean(D_fake_f0_2+1e-12) + tf.reduce_sum(tf.abs(f0_output_placeholder- (f0_output_2/2+0.5))) *0.00005
 
         D_loss_f0_2 = tf.reduce_mean(D_real_f0_2 +1e-12)-tf.reduce_mean(D_fake_f0_2+1e-12)
@@ -245,41 +245,41 @@ def train(_):
 
                     for critic_itr in range(n_critic):
 
-                        sess.run(dis_train_function, feed_dict = feed_dict)
-                        sess.run(clip_discriminator_var_op_feats, feed_dict = feed_dict)
+                        # sess.run(dis_train_function, feed_dict = feed_dict)
+                        # sess.run(clip_discriminator_var_op_feats, feed_dict = feed_dict)
                         sess.run(dis_train_function_f0, feed_dict = feed_dict)
                         sess.run(clip_discriminator_var_op_f0, feed_dict = feed_dict)
 
                     # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
                     # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
 
-                    _, step_gen_loss = sess.run([ gen_train_function, G_loss_GAN], feed_dict = feed_dict)
-                    # import pdb;pdb.set_trace()
-                    # if step_gen_acc>0.3:
-                    step_dis_loss = sess.run(D_loss, feed_dict = feed_dict)
+                    # _, step_gen_loss = sess.run([ gen_train_function, G_loss_GAN], feed_dict = feed_dict)
+                    # # import pdb;pdb.set_trace()
+                    # # if step_gen_acc>0.3:
+                    # step_dis_loss = sess.run(D_loss, feed_dict = feed_dict)
 
 
 
                     # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
                     # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
 
-                    _, step_gen_loss_f0 = sess.run([ gen_train_function_f0, G_loss_GAN_f0], feed_dict = feed_dict)
+                    _, step_gen_loss = sess.run([ gen_train_function_f0, G_loss_GAN_f0], feed_dict = feed_dict)
                     # import pdb;pdb.set_trace()
                     # if step_gen_acc>0.3:
-                    step_dis_loss_f0 = sess.run(D_loss_f0, feed_dict = feed_dict)  
+                    step_dis_loss = sess.run(D_loss_f0, feed_dict = feed_dict)  
 
-                    if epoch > 1000:
-                        for critic_itr in range(n_critic_f0):
-                            sess.run(dis_train_function_f0_2, feed_dict = feed_dict)
-                            sess.run(clip_discriminator_var_op_f0, feed_dict = feed_dict)
+                    # if epoch > 1000:
+                    #     for critic_itr in range(n_critic_f0):
+                    #         sess.run(dis_train_function_f0_2, feed_dict = feed_dict)
+                    #         sess.run(clip_discriminator_var_op_f0, feed_dict = feed_dict)
 
                     # feed_dict = {input_placeholder: feats, output_placeholder: feats[:,:,:-2], f0_input_placeholder: f0, rand_input_placeholder: np.random.uniform(-1.0, 1.0, size=[30,config.max_phr_len,4]),
                     # phoneme_labels:phos, singer_labels: singer_ids, phoneme_labels_shuffled:phos_shu, singer_labels_shuffled:sing_id_shu}
 
-                        _, step_gen_loss_f0_2 = sess.run([ gen_train_function_f0_2, G_loss_GAN_f0_2], feed_dict = feed_dict)
-                        # import pdb;pdb.set_trace()
-                        # if step_gen_acc>0.3:
-                        step_dis_loss_f0_2 = sess.run(D_loss_f0_2, feed_dict = feed_dict)  
+                        # _, step_gen_loss_f0_2 = sess.run([ gen_train_function_f0_2, G_loss_GAN_f0_2], feed_dict = feed_dict)
+                        # # import pdb;pdb.set_trace()
+                        # # if step_gen_acc>0.3:
+                        # step_dis_loss_f0_2 = sess.run(D_loss_f0_2, feed_dict = feed_dict)  
 
                       
                     # _, step_pho_loss, step_pho_acc = sess.run([pho_train_function, pho_loss, pho_acc], feed_dict= feed_dict)
