@@ -511,7 +511,7 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
 
         out_batches_feats= out_batches_feats[:len(feats)]
 
-        out_batches_f0 = out_batches_f0 * (max_feat[-2]+5)
+        out_batches_f0 = out_batches_f0 *(max_feat[-2] - min_feat[-2] +10) + (min_feat[-2]-5)
 
         out_batches_f0= out_batches_f0[:len(feats)]
 
