@@ -60,7 +60,7 @@ def bi_static_stacked_RNN(x, scope='RNN'):
     Input and output in batch major format
     """
     with tf.variable_scope(scope):
-        x = tf.unstack(x, config.max_phr_len, 1)
+        x = tf.unstack(x, config.max_phr_len/16, 1)
 
         output = x
         num_layer = 2
@@ -619,22 +619,35 @@ def GAN_discriminator_f0(inputs, conds, is_train):
 
   conv1 =  tf.nn.leaky_relu(tf.layers.conv2d(inputs, 32, (4,1), strides=(2,1),  padding = 'same', name = "G_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
-  conv1 = tf.layers.batch_normalization(conv1, training=is_train, name='bn2')
+  # conv1 = tf.layers.batch_normalization(conv1, training=is_train, name='bn2')
 
   conv5 =  tf.nn.leaky_relu(tf.layers.conv2d(conv1, 32, (4,1), strides=(2,1),  padding = 'same', name = "G_5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
-  conv5 = tf.layers.batch_normalization(conv5, training=is_train, name='bn3')
+  # conv5 = tf.layers.batch_normalization(conv5, training=is_train, name='bn3')
 
   conv6 =  tf.nn.leaky_relu(tf.layers.conv2d(conv5, 64, (4,1), strides=(2,1),  padding = 'same', name = "G_6", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
   
-  conv6 = tf.layers.batch_normalization(conv6, training=is_train, name='bn4')
+  # conv6 = tf.layers.batch_normalization(conv6, training=is_train, name='bn4')
   
   conv7 = tf.nn.leaky_relu(tf.layers.conv2d(conv6, 64, (4,1), strides=(2,1),  padding = 'same', name = "G_7", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
-  conv7 = tf.layers.batch_normalization(conv7, training=is_train, name='bn5')
+  # conv7 = tf.layers.batch_normalization(conv7, training=is_train, name='bn5')
 
-  conv8 = tf.nn.leaky_relu(tf.layers.conv2d(conv7, 1, (1,1), strides=(1,1),  padding = 'same', name = "G_8", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+  # conv8 = tf.nn.leaky_relu(tf.layers.conv2d(conv7, 1, (1,1), strides=(1,1),  padding = 'same', name = "G_8", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
-  conv8 = tf.layers.batch_normalization(conv8, training=is_train, name='bn6')
+  # conv8 = tf.layers.batch_normalization(conv8, training=is_train, name='bn6')
+
+  output = tf.reshape(conv7, [config.batch_size, int(config.max_phr_len/16), -1])
+
+
+
+  output = bi_static_stacked_RNN(output, scope = 'RNN_3')
+
+  output = tf.reshape(output, [config.batch_size, config.max_phr_len, 1,-1])
+
+  conv8 = tf.nn.leaky_relu(tf.layers.conv2d(output, 1, (1,1), strides=(1,1),  padding = 'same', name = "G_8", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+
+
+  # import pdb;pdb.set_trace()
 
   return conv8
 
