@@ -39,51 +39,51 @@ def selu(x):
    return scale*tf.where(x>=0.0, x, alpha*tf.nn.elu(x))
 
 
-# def bi_dynamic_stacked_RNN(x, input_lengths, scope='RNN'):
-#     with tf.variable_scope(scope):
-#     # x = tf.layers.dense(x, 128)
+def bi_dynamic_stacked_RNN(x, input_lengths, scope='RNN'):
+    with tf.variable_scope(scope):
+    # x = tf.layers.dense(x, 128)
 
-#         cell = tf.nn.rnn_cell.LSTMCell(num_units=config.lstm_size, state_is_tuple=True)
-#         cell2 = tf.nn.rnn_cell.LSTMCell(num_units=config.lstm_size, state_is_tuple=True)
+        cell = tf.nn.rnn_cell.LSTMCell(num_units=config.lstm_size, state_is_tuple=True)
+        cell2 = tf.nn.rnn_cell.LSTMCell(num_units=config.lstm_size, state_is_tuple=True)
 
-#         outputs, _state1, state2  = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
-#             cells_fw=[cell,cell2],
-#             cells_bw=[cell,cell2],
-#             dtype=config.dtype,
-#             sequence_length=input_lengths,
-#             inputs=x)
+        outputs, _state1, state2  = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
+            cells_fw=[cell,cell2],
+            cells_bw=[cell,cell2],
+            dtype=config.dtype,
+            sequence_length=input_lengths,
+            inputs=x)
 
-#     return outputs
+    return outputs
 
-# def bi_static_stacked_RNN(x, scope='RNN'):
-#     """
-#     Input and output in batch major format
-#     """
-#     with tf.variable_scope(scope):
-#         x = tf.unstack(x, config.max_phr_len, 1)
+def bi_static_stacked_RNN(x, scope='RNN'):
+    """
+    Input and output in batch major format
+    """
+    with tf.variable_scope(scope):
+        x = tf.unstack(x, config.max_phr_len, 1)
 
-#         output = x
-#         num_layer = 2
-#         # for n in range(num_layer):
-#         lstm_fw = tf.nn.rnn_cell.LSTMCell(config.lstm_size, state_is_tuple=True)
-#         lstm_bw = tf.nn.rnn_cell.LSTMCell(config.lstm_size, state_is_tuple=True)
+        output = x
+        num_layer = 2
+        # for n in range(num_layer):
+        lstm_fw = tf.nn.rnn_cell.LSTMCell(config.lstm_size, state_is_tuple=True)
+        lstm_bw = tf.nn.rnn_cell.LSTMCell(config.lstm_size, state_is_tuple=True)
 
-#         _initial_state_fw = lstm_fw.zero_state(config.batch_size, tf.float32)
-#         _initial_state_bw = lstm_bw.zero_state(config.batch_size, tf.float32)
+        _initial_state_fw = lstm_fw.zero_state(config.batch_size, tf.float32)
+        _initial_state_bw = lstm_bw.zero_state(config.batch_size, tf.float32)
 
-#         output, _state1, _state2 = tf.contrib.rnn.static_bidirectional_rnn(lstm_fw, lstm_bw, output, 
-#                                                   initial_state_fw=_initial_state_fw,
-#                                                   initial_state_bw=_initial_state_bw, 
-#                                                   scope='BLSTM_')
-#         output = tf.stack(output)
-#         output_fw = output[0]
-#         output_bw = output[1]
-#         output = tf.transpose(output, [1,0,2])
+        output, _state1, _state2 = tf.contrib.rnn.static_bidirectional_rnn(lstm_fw, lstm_bw, output, 
+                                                  initial_state_fw=_initial_state_fw,
+                                                  initial_state_bw=_initial_state_bw, 
+                                                  scope=scope)
+        output = tf.stack(output)
+        output_fw = output[0]
+        output_bw = output[1]
+        output = tf.transpose(output, [1,0,2])
 
 
-#         # output = tf.layers.dense(output, config.output_features, activation=tf.nn.relu) # Remove this to use cbhg
+        # output = tf.layers.dense(output, config.output_features, activation=tf.nn.relu) # Remove this to use cbhg
 
-#         return output
+        return output
 
 
 
@@ -619,22 +619,22 @@ def GAN_discriminator_f0(inputs, conds, is_train):
 
   conv1 =  tf.nn.leaky_relu(tf.layers.conv2d(inputs, 32, (4,1), strides=(2,1),  padding = 'same', name = "G_1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
-  # conv1 = tf.layers.batch_normalization(conv1, training=is_train, name='bn2')
+  conv1 = tf.layers.batch_normalization(conv1, training=is_train, name='bn2')
 
-  conv5 =  tf.nn.leaky_relu(tf.layers.conv2d(conv1, 64, (4,1), strides=(2,1),  padding = 'same', name = "G_5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
-  # conv5 = tf.layers.batch_normalization(conv5, training=is_train, name='bn3')
+  conv5 =  tf.nn.leaky_relu(tf.layers.conv2d(conv1, 32, (4,1), strides=(2,1),  padding = 'same', name = "G_5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+  conv5 = tf.layers.batch_normalization(conv5, training=is_train, name='bn3')
 
-  conv6 =  tf.nn.leaky_relu(tf.layers.conv2d(conv5, 128, (4,1), strides=(2,1),  padding = 'same', name = "G_6", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+  conv6 =  tf.nn.leaky_relu(tf.layers.conv2d(conv5, 64, (4,1), strides=(2,1),  padding = 'same', name = "G_6", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
   
-  # conv6 = tf.layers.batch_normalization(conv6, training=is_train, name='bn4')
+  conv6 = tf.layers.batch_normalization(conv6, training=is_train, name='bn4')
   
-  conv7 = tf.nn.leaky_relu(tf.layers.conv2d(conv6, 256, (4,1), strides=(2,1),  padding = 'same', name = "G_7", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+  conv7 = tf.nn.leaky_relu(tf.layers.conv2d(conv6, 64, (4,1), strides=(2,1),  padding = 'same', name = "G_7", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
-  # conv7 = tf.layers.batch_normalization(conv7, training=is_train, name='bn5')
+  conv7 = tf.layers.batch_normalization(conv7, training=is_train, name='bn5')
 
   conv8 = tf.nn.leaky_relu(tf.layers.conv2d(conv7, 1, (1,1), strides=(1,1),  padding = 'same', name = "G_8", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
-  # conv8 = tf.layers.batch_normalization(conv8, training=is_train, name='bn6')
+  conv8 = tf.layers.batch_normalization(conv8, training=is_train, name='bn6')
 
   return conv8
 
@@ -719,7 +719,7 @@ def GAN_generator_f0(inputs, is_train):
 
     inputs = tf.reshape(inputs, [config.batch_size, config.max_phr_len, 1, -1])
 
-    inputs = tf.nn.leaky_relu(tf.layers.dense(inputs, config.wavenet_filters, name = "P_in", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    inputs = tf.nn.relu(tf.layers.dense(inputs, config.wavenet_filters, name = "P_in", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     # rand = tf.layers.dense(rand, config.wavenet_filters, name = "G_rand", kernel_initializer=tf.random_normal_initializer(stddev=0.02))
 
@@ -727,73 +727,75 @@ def GAN_generator_f0(inputs, is_train):
     
     conv1 = tf.layers.batch_normalization(conv1, training=is_train, name='bn2')
 
-    conv5 =  tf.nn.relu(tf.layers.conv2d(conv1, 64, (4,1), strides=(2,1),   padding = 'same', name = "G_5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    conv5 =  tf.nn.relu(tf.layers.conv2d(conv1, 32, (4,1), strides=(2,1),   padding = 'same', name = "G_5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
     # import pdb;pdb.set_trace()
     conv5 = tf.layers.batch_normalization(conv5, training=is_train, name='bn3')
 
-    conv6 =  tf.nn.relu(tf.layers.conv2d(conv5, 128, (4,1), strides=(2,1),  padding = 'same', name = "G_6", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    conv6 =  tf.nn.relu(tf.layers.conv2d(conv5, 64, (4,1), strides=(2,1),  padding = 'same', name = "G_6", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
     
     conv6 = tf.layers.batch_normalization(conv6, training=is_train, name='bn4')
 
-    conv7 = tf.nn.relu(tf.layers.conv2d(conv6, 256, (4,1), strides=(2,1),  padding = 'same', name = "G_7", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    conv7 = tf.nn.relu(tf.layers.conv2d(conv6, 64, (4,1), strides=(2,1),  padding = 'same', name = "G_7", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
     
     conv7 = tf.layers.batch_normalization(conv7, training=is_train, name='bn5')
 
-    conv8 = tf.nn.relu(tf.layers.conv2d(conv7, 512, (4,1), strides=(2,1),  padding = 'same', name = "G_8", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    conv8 = tf.nn.relu(tf.layers.conv2d(conv7, 128, (4,1), strides=(2,1),  padding = 'same', name = "G_8", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     conv8 = tf.layers.batch_normalization(conv8, training=is_train, name='bn6')
 
-    conv9 = tf.nn.relu(tf.layers.conv2d(conv7, 1024, (4,1), strides=(1,1),  padding = 'valid', name = "G_9", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    conv9 = tf.nn.relu(tf.layers.conv2d(conv8, 128, (4,1), strides=(2,1),  padding = 'same', name = "G_9", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
     
     conv9 = tf.layers.batch_normalization(conv9, training=is_train, name='bn')
 
+    # import pdb;pdb.set_trace()
 
-    deconv1 = tf.image.resize_images(conv9, size=(4,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
-    deconv1 = tf.nn.relu(tf.layers.conv2d(deconv1, 1024, (4,1), strides=(1,1),  padding = 'same', name = "G_dec1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    deconv1 = tf.image.resize_images(conv9, size=(32,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+
+    deconv1 = tf.nn.relu(tf.layers.conv2d(deconv1, 128, (4,1), strides=(1,1),  padding = 'same', name = "G_dec1", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     deconv1 = tf.layers.batch_normalization(deconv1, training=is_train, name='bn7')
 
     deconv1 = tf.concat([deconv1, conv8], axis = -1)
 
-    deconv2 = tf.image.resize_images(deconv1, size=(8,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv2 = tf.image.resize_images(deconv1, size=(64,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
-    deconv2 = tf.nn.relu(tf.layers.conv2d(deconv2, 512, (4,1), strides=(1,1),  padding = 'same', name = "G_dec2", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    deconv2 = tf.nn.relu(tf.layers.conv2d(deconv2, 128, (4,1), strides=(1,1),  padding = 'same', name = "G_dec2", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
  
     deconv2 = tf.layers.batch_normalization(deconv2, training=is_train, name='bn8')
     
     deconv2 = tf.concat([deconv2, conv7], axis = -1)
 
 
-    deconv3 = tf.image.resize_images(deconv2, size=(16,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv3 = tf.image.resize_images(deconv2, size=(128,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
-    deconv3 = tf.nn.relu(tf.layers.conv2d(deconv3, 256, (4,1), strides=(1,1),  padding = 'same', name = "G_dec3", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    deconv3 = tf.nn.relu(tf.layers.conv2d(deconv3, 64, (4,1), strides=(1,1),  padding = 'same', name = "G_dec3", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     deconv3 = tf.layers.batch_normalization(deconv3, training=is_train, name='bn9')
 
     deconv3 = tf.concat([deconv3, conv6], axis = -1)
 
 
-    deconv4 = tf.image.resize_images(deconv3, size=(32,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv4 = tf.image.resize_images(deconv3, size=(256,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
-    deconv4 = tf.nn.relu(tf.layers.conv2d(deconv4, 128, (4,1), strides=(1,1),  padding = 'same', name = "G_dec4", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    deconv4 = tf.nn.relu(tf.layers.conv2d(deconv4, 64, (4,1), strides=(1,1),  padding = 'same', name = "G_dec4", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     deconv4 = tf.layers.batch_normalization(deconv4, training=is_train, name='bn10')
 
     deconv4 = tf.concat([deconv4, conv5], axis = -1)
 
 
-    deconv5 = tf.image.resize_images(deconv4, size=(64,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv5 = tf.image.resize_images(deconv4, size=(512,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
-    deconv5 = tf.nn.relu(tf.layers.conv2d(deconv5, 64, (4,1), strides=(1,1),  padding = 'same', name = "G_dec5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    deconv5 = tf.nn.relu(tf.layers.conv2d(deconv5, 32, (4,1), strides=(1,1),  padding = 'same', name = "G_dec5", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     deconv5 = tf.layers.batch_normalization(deconv5, training=is_train, name='bn11')
 
     deconv5 = tf.concat([deconv5, conv1], axis = -1)
 
-    deconv6= tf.image.resize_images(deconv5, size=(128,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    deconv6= tf.image.resize_images(deconv5, size=(1024,1), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
-    deconv6 = tf.nn.relu(tf.layers.conv2d(deconv6, 64, (4,1), strides=(1,1),  padding = 'same', name = "G_dec6", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+    deconv6 = tf.nn.relu(tf.layers.conv2d(deconv6, 32, (4,1), strides=(1,1),  padding = 'same', name = "G_dec6", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
 
     deconv6 = tf.layers.batch_normalization(deconv6, training=is_train, name='bn12')
 
@@ -803,10 +805,20 @@ def GAN_generator_f0(inputs, is_train):
 
     output = tf.layers.batch_normalization(output, training=is_train, name='bno')
 
+
+
     # output = tf.layers.conv2d(deconv5, 64*128, (128,1), strides=1,  padding = 'valid', name = "G_o_2", activation = tf.nn.tanh)
 
 
     output = tf.reshape(output, [config.batch_size, config.max_phr_len, -1])
+
+    # import pdb;pdb.set_trace()
+
+    # output = bi_static_stacked_RNN(output, scope = 'RNN_3')
+
+    output = tf.nn.relu(tf.layers.dense(output, 66, name = "P_out", kernel_initializer=tf.random_normal_initializer(stddev=0.02)))
+
+    output = tf.layers.batch_normalization(output, training=is_train, name='bno_2')
 
     return output
 
