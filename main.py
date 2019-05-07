@@ -88,14 +88,14 @@ def train(_):
             f0_output_2 = modules.GAN_generator_f0(inputs, is_train)
 
         with tf.variable_scope('Discriminator_f0') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
             D_real_f0 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs, is_train)
             scope.reuse_variables()
             D_fake_f0 = modules.GAN_discriminator_f0(f0_output,inputs, is_train)
 
             scope.reuse_variables()
 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
             D_real_f0_2 = modules.GAN_discriminator_f0((f0_output_placeholder-0.5)*2, inputs, is_train)
             scope.reuse_variables()
             D_fake_f0_2 = modules.GAN_discriminator_f0(f0_output_2,inputs, is_train)
@@ -380,11 +380,15 @@ def synth_file(file_name = "015.hdf5", singer_index = 0, file_path=config.wav_di
             voc_output = modules.GAN_generator(inputs, is_train)
 
 
+
         with tf.variable_scope('Generator_f0') as scope: 
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, output_placeholder], axis = -1)
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
+            # inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
             f0_output = modules.GAN_generator_f0(inputs, is_train)
+
             scope.reuse_variables()
-            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder, (voc_output/2)+0.5], axis = -1)
+
+            inputs = tf.concat([phone_onehot_labels, f0_onehot_labels, phone_context_placeholder, f0_context_placeholder], axis = -1)
             f0_output_2 = modules.GAN_generator_f0(inputs, is_train)
 
 
