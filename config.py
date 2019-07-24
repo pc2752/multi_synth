@@ -9,7 +9,7 @@ wav_dir = '../apps/datasets/import_files/nitech_jp_song_f001/'
 voice_dir = './voice/'
 backing_dir = './backing/'
 # log_dir = './log_f0_npss/'
-log_dir = './log_just_f0_dis/'
+log_dir = './log/'
 # 3 for just G1 output with uv, 2 for just G1 output without uv and 1 for a mixture (G1 after 1000), without numbers for both from ebeggining
 val_dir = './'
 feats_dir = './feats/'
@@ -52,6 +52,7 @@ comp_mode = 'mfsc'
 num_epochs = 2000
 
 print_every = 1
+validate_every = 1
 save_every = 10
 
 batches_per_epoch_train = 100
@@ -60,7 +61,11 @@ batches_per_epoch_val = 10
 batch_size = 30
 samples_per_file = 30
 
-max_phr_len = 128
+max_phr_len = 256
+
+filter_len = 5
+encoder_layers = 8
+filters = 32
 
 wavenet_layers = 7
 rec_field = 2**wavenet_layers

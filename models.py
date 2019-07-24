@@ -1,7 +1,7 @@
 import tensorflow as tf
-from modules_tf import DeepSalience, nr_wavenet
+import modules_tf as modules
 import config
-from data_pipeline import data_gen, sep_gen
+from data_pipeline import data_gen
 import time, os
 import utils
 import h5py
@@ -10,8 +10,12 @@ import mir_eval
 import pandas as pd
 from random import randint
 import librosa
-import sig_process
+# import sig_process
+
+import soundfile as sf
+
 import matplotlib.pyplot as plt
+from scipy.ndimage import filters
 
 class Model(object):
     def __init__(self):
@@ -36,15 +40,8 @@ class Model(object):
         rec = scores['Recall']
         return pre, acc, rec
 
-    def get_placeholders(self):
-        """
-        Returns the placeholders for the model. 
-        Depending on the mode, can return placeholders for either just the generator or both the generator and discriminator.
-        """
 
-        self.input_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size, config.max_phr_len, 360, 6),name='input_placeholder')
-        self.output_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size, config.max_phr_len, 360),name='output_placeholder')
-        self.is_train = tf.placeholder(tf.bool, name="is_train")
+
 
     def load_model(self, sess, log_dir):
         """
@@ -52,8 +49,6 @@ class Model(object):
         """
         self.init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
         self.saver = tf.train.Saver(max_to_keep= config.max_models_to_keep)
-
-
 
 
         sess.run(self.init_op)
@@ -65,25 +60,6 @@ class Model(object):
             self.saver.restore(sess, ckpt.model_checkpoint_path)
 
 
-    def get_optimizers(self):
-        """
-        Returns the optimizers for the model, based on the loss functions and the mode. 
-        """
-        self.optimizer = tf.train.AdamOptimizer(learning_rate = config.init_lr)
-        self.global_step = tf.Variable(0, name='global_step', trainable=False)
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        with tf.control_dependencies(update_ops):
-            self.train_function = self.optimizer.minimize(self.loss, global_step = self.global_step)
-
-
-    def get_summary(self, sess, log_dir):
-        """
-        Gets the summaries and summary writers for the losses.
-        """
-        self.loss_summary = tf.summary.scalar('final_loss', self.loss)
-        self.train_summary_writer = tf.summary.FileWriter(log_dir+'train/', sess.graph)
-        self.val_summary_writer = tf.summary.FileWriter(log_dir+'val/', sess.graph)
-        self.summary = tf.summary.merge_all()
     def save_model(self, sess, epoch, log_dir):
         """
         Save the model.
@@ -101,137 +77,91 @@ class Model(object):
         for key, value in print_dict.items():
             print('{} : {}'.format(key, value))
 
+class MultiSynth(Model):
 
-class DeepSal(Model):
+    def get_optimizers(self):
+        """
+        Returns the optimizers for the model, based on the loss functions and the mode. 
+        """
+
+        self.final_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope = 'Final_Model')
+        self.d_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,scope = 'Discriminator')
+
+        self.final_optimizer = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+        self.dis_optimizer = tf.train.RMSPropOptimizer(learning_rate=5e-5)
+
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
+        self.global_step_dis = tf.Variable(0, name='dis_global_step', trainable=False)
+
+
+
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
+            self.final_train_function = self.final_optimizer.minimize(self.final_loss, global_step = self.global_step, var_list = self.final_params)
+            self.dis_train_function = self.dis_optimizer.minimize(self.D_loss, global_step = self.global_step_dis, var_list = self.d_params)
+            self.clip_discriminator_var_op = [var.assign(tf.clip_by_value(var, -0.01, 0.01)) for var in self.d_params]
 
     def loss_function(self):
         """
         returns the loss function for the model, based on the mode. 
         """
-        self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels= self.output_placeholder, logits = self.output_logits))
 
-    def read_input_file(self, file_name):
+        self.final_loss = tf.reduce_sum(tf.abs(self.output_placeholder- (self.output/2+0.5)))/(config.batch_size*config.max_phr_len) + tf.reduce_mean(self.D_fake+1e-12)
+
+        self.D_loss = tf.reduce_mean(self.D_real +1e-12) - tf.reduce_mean(self.D_fake+1e-12)
+
+
+    def get_summary(self, sess, log_dir):
         """
-        Function to read and process input file, given name and the synth_mode.
-        Returns features for the file based on mode (0 for hdf5 file, 1 for wav file).
-        Currently, only the HDF5 version is implemented.
-        """
-        # if file_name.endswith('.hdf5'):
-        feat_file = h5py.File(config.feats_dir + file_name)
-        atb = feat_file['atb'][()]
-
-        atb = atb[:, 1:]
-
-        hcqt = feat_file['voc_hcqt'][()]
-
-        feat_file.close()
-
-        in_batches_hcqt, nchunks_in = utils.generate_overlapadd(hcqt.reshape(-1,6*360))
-        in_batches_hcqt = in_batches_hcqt.reshape(in_batches_hcqt.shape[0], config.batch_size, config.max_phr_len,
-                                                  6, 360)
-        in_batches_hcqt = np.swapaxes(in_batches_hcqt, -1, -2)
-        return in_batches_hcqt, atb, nchunks_in
-
-    def read_input_wav_file(self, file_name):
-        """
-        Function to read and process input file, given name and the synth_mode.
-        Returns features for the file based on mode (0 for hdf5 file, 1 for wav file).
-        Currently, only the HDF5 version is implemented.
-        """
-        audio, fs = librosa.core.load(file_name, sr=config.fs)
-        hcqt = sig_process.get_hcqt(audio/4)
-
-        hcqt = np.swapaxes(hcqt, 0, 1)
-
-        in_batches_hcqt, nchunks_in = utils.generate_overlapadd(hcqt.reshape(-1,6*360))
-        in_batches_hcqt = in_batches_hcqt.reshape(in_batches_hcqt.shape[0], config.batch_size, config.max_phr_len,
-		                                          6, 360)
-        in_batches_hcqt = np.swapaxes(in_batches_hcqt, -1, -2)
-
-        return in_batches_hcqt, nchunks_in, hcqt.shape[0]
-
-
-
-
-    def test_file(self, file_name):
-        """
-        Function to extract multi pitch from file. Currently supports only HDF5 files.
-        """
-        sess = tf.Session()
-        self.load_model(sess, log_dir = config.log_dir)
-        scores = self.extract_f0_file(file_name, sess)
-        return scores
-
-    def test_wav_file(self, file_name, save_path):
-        """
-        Function to extract multi pitch from wav file.
+        Gets the summaries and summary writers for the losses.
         """
 
-        sess = tf.Session()
-        self.load_model(sess, log_dir = config.log_dir)
-        in_batches_hcqt, nchunks_in, max_len = self.read_input_wav_file(file_name)
-        out_batches_atb = []
-        for in_batch_hcqt in in_batches_hcqt:
-            feed_dict = {self.input_placeholder: in_batch_hcqt, self.is_train: False}
-            out_atb = sess.run(self.outputs, feed_dict=feed_dict)
-            out_batches_atb.append(out_atb)
-        out_batches_atb = np.array(out_batches_atb)
-        out_batches_atb = utils.overlapadd(out_batches_atb.reshape(out_batches_atb.shape[0], config.batch_size, config.max_phr_len, -1),
-                         nchunks_in)
-        out_batches_atb = out_batches_atb[:max_len]
-        time_1, ori_freq = utils.process_output(out_batches_atb)
-        utils.save_multif0_output(time_1, ori_freq, save_path)
+        self.final_summary = tf.summary.scalar('final_loss', self.final_loss)
 
 
-    def test_wav_folder(self, folder_name, save_path):
+
+
+        self.train_summary_writer = tf.summary.FileWriter(log_dir+'train/', sess.graph)
+        self.val_summary_writer = tf.summary.FileWriter(log_dir+'val/', sess.graph)
+        self.summary = tf.summary.merge_all()
+
+    def get_placeholders(self):
         """
-        Function to extract multi pitch from wav files in a folder
+        Returns the placeholders for the model. 
+        Depending on the mode, can return placeholders for either just the generator or both the generator and discriminator.
         """
 
-        songs = next(os.walk(folder_name))[1]
+        self.output_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,1),name='output_placeholder')
 
-        sess = tf.Session()
-        self.load_model(sess, log_dir = config.log_dir)
-        
+        self.prev_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,1),name='prev_output_placeholder')
 
-        for song in songs:
-        	count = 0
-        	print ("Processing song %s" % song)
-	        file_list = [x for x in os.listdir(os.path.join(folder_name, song)) if x.endswith('.wav') and not x.startswith('.')]
-	        for file_name in file_list:
-		        in_batches_hcqt, nchunks_in, max_len = self.read_input_wav_file(os.path.join(folder_name, song, file_name))
-		        out_batches_atb = []
-		        for in_batch_hcqt in in_batches_hcqt:
-		            feed_dict = {self.input_placeholder: in_batch_hcqt, self.is_train: False}
-		            out_atb = sess.run(self.outputs, feed_dict=feed_dict)
-		            out_batches_atb.append(out_atb)
-		        out_batches_atb = np.array(out_batches_atb)
-		        out_batches_atb = utils.overlapadd(out_batches_atb.reshape(out_batches_atb.shape[0], config.batch_size, config.max_phr_len, -1),
-		                         nchunks_in)
-		        out_batches_atb = out_batches_atb[:max_len]
-		        time_1, ori_freq = utils.process_output(out_batches_atb)
-		        utils.save_multif0_output(time_1, ori_freq, os.path.join(save_path,song,file_name[:-4]+'.csv'))
-		        count+=1
-		        utils.progress(count, len(file_list), suffix='evaluation done')
+        self.curr_note_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len),name='curr_note_placeholder')
+        self.curr_note_onehot_labels = tf.one_hot(indices=tf.cast(self.curr_note_placeholder, tf.int32), depth= len(config.notes))
 
-    def extract_f0_file(self, file_name, sess):
-        in_batches_hcqt, atb, nchunks_in = self.read_input_file(file_name)
-        out_batches_atb = []
-        for in_batch_hcqt in in_batches_hcqt:
-            feed_dict = {self.input_placeholder: in_batch_hcqt, self.is_train: False}
-            out_atb = sess.run(self.outputs, feed_dict=feed_dict)
-            out_batches_atb.append(out_atb)
-        out_batches_atb = np.array(out_batches_atb)
-        out_batches_atb = utils.overlapadd(out_batches_atb.reshape(out_batches_atb.shape[0], config.batch_size, config.max_phr_len, -1),
-                         nchunks_in)
-        out_batches_atb = out_batches_atb[:atb.shape[0]]
-        time_1, ori_freq = utils.process_output(atb)
-        time_2, est_freq = utils.process_output(out_batches_atb)
+        self.prev_note_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len),name='prev_note_placeholder')
+        self.prev_note_onehot_labels = tf.one_hot(indices=tf.cast(self.prev_note_placeholder, tf.int32), depth= len(config.notes))
 
-        scores = mir_eval.multipitch.evaluate(time_1, ori_freq, time_2, est_freq)
-        return scores
+        self.next_note_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len),name='next_note_placeholder')
+        self.next_note_onehot_labels = tf.one_hot(indices=tf.cast(self.next_note_placeholder, tf.int32), depth= len(config.notes))
 
-        # import pdb;pdb.set_trace()
+        self.curr_phone_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len),name='curr_phone_placeholder')
+        self.curr_phone_onehot_labels = tf.one_hot(indices=tf.cast(self.curr_phone_placeholder, tf.int32), depth= len(config.phonemas))
+
+        self.prev_phone_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len),name='prev_phone_placeholder')
+        self.prev_phone_onehot_labels = tf.one_hot(indices=tf.cast(self.prev_phone_placeholder, tf.int32), depth= len(config.phonemas))
+
+        self.next_phone_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len),name='next_phone_placeholder')
+        self.next_phone_onehot_labels = tf.one_hot(indices=tf.cast(self.next_phone_placeholder, tf.int32), depth= len(config.phonemas ))
+
+        self.phone_context_placeholder= tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,3),name='phone_context_placeholder')
+
+        self.note_context_placeholder= tf.placeholder(tf.float32, shape=(config.batch_size,config.max_phr_len,3),name='note_context_placeholder')
+
+
+        self.is_train = tf.placeholder(tf.bool, name="is_train")
+
+        # self.wave_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size, config.max_phr_len*2**8),
+        #                                  name='wave_placeholder')
 
     def train(self):
         """
@@ -252,18 +182,27 @@ class DeepSal(Model):
 
         for epoch in range(start_epoch, config.num_epochs):
             data_generator = data_gen()
+            val_generator = data_gen(mode = 'Val')
             start_time = time.time()
 
-
             batch_num = 0
-            epoch_train_loss = 0
+            epoch_final_loss = 0
+            epoch_dis_loss = 0
 
+            val_final_loss = 0
+            val_dis_loss = 0
 
             with tf.variable_scope('Training'):
-                for ins, outs in data_generator:
+                for out_feats, out_phones, out_back in data_generator:
 
-                    step_loss, summary_str = self.train_model(ins, outs, sess)
-                    epoch_train_loss+=step_loss
+                	
+
+                    final_loss, dis_loss, summary_str = self.train_model(out_feats, out_phones, out_back, epoch, sess)
+
+
+                    epoch_final_loss+=final_loss
+                    epoch_dis_loss+=dis_loss
+
 
                     self.train_summary_writer.add_summary(summary_str, epoch)
                     self.train_summary_writer.flush()
@@ -272,14 +211,38 @@ class DeepSal(Model):
 
                     batch_num+=1
 
-                epoch_train_loss = epoch_train_loss/batch_num
-                print_dict = {"Training Loss": epoch_train_loss}
+                epoch_final_loss = epoch_final_loss/batch_num
+                epoch_dis_loss = epoch_dis_loss/batch_num
+
+
+                print_dict = {"Final Loss": epoch_final_loss}
+
+                print_dict["Dis Loss"] =  epoch_dis_loss
+
 
             if (epoch + 1) % config.validate_every == 0:
-                pre, acc, rec = self.validate_model(sess)
-                print_dict["Validation Precision"] = pre
-                print_dict["Validation Accuracy"] = acc
-                print_dict["Validation Recall"] = rec
+                batch_num = 0
+                with tf.variable_scope('Validation'):
+                    for out_feats, out_phones, out_back in val_generator:
+                    	
+
+                        final_loss, dis_loss, summary_str= self.validate_model(out_feats, out_phones, out_back, sess)
+                        val_final_loss+=final_loss
+                        val_dis_loss+=dis_loss
+
+
+                        self.val_summary_writer.add_summary(summary_str, epoch)
+                        self.val_summary_writer.flush()
+                        batch_num+=1
+
+                        utils.progress(batch_num, config.batches_per_epoch_val, suffix='validation done')
+
+                    val_final_loss = val_final_loss/batch_num
+                    val_dis_loss = val_dis_loss/batch_num
+
+                    print_dict["Val Final Loss"] =  val_final_loss
+                    print_dict["Val Dis Loss"] =  val_dis_loss
+
 
             end_time = time.time()
             if (epoch + 1) % config.print_every == 0:
@@ -287,318 +250,156 @@ class DeepSal(Model):
             if (epoch + 1) % config.save_every == 0 or (epoch + 1) == config.num_epochs:
                 self.save_model(sess, epoch+1, config.log_dir)
 
-    def train_model(self, ins, outs, sess):
+
+    def train_model(self, out_feats, out_phones, out_back, epoch, sess):
         """
         Function to train the model for each epoch
         """
-        feed_dict = {self.input_placeholder: ins, self.output_placeholder: outs, self.is_train: True}
-        _, step_loss= sess.run(
-            [self.train_function, self.loss], feed_dict=feed_dict)
+        # assert (np.argmax(singer_targs, axis = -1)>3).all()
+
+        out_feats = np.clip(out_feats + np.random.normal(0,.5,(out_feats.shape)) * 0.4 ,0.0, 1.0)
+
+        if epoch<25 or epoch%100 == 0:
+            n_critic = 15
+        else:
+            n_critic = 5
+        feed_dict = {self.prev_placeholder:out_back[:,:,-2:-1], self.output_placeholder:out_feats[:,:,-2:-1], self.prev_phone_placeholder: out_phones[:,:,0], self.curr_phone_placeholder: out_phones[:,:,1],
+        self.next_phone_placeholder: out_phones[:,:,2], self.phone_context_placeholder: out_phones[:,:,3:6], self.prev_note_placeholder: out_phones[:,:,6]
+        , self.curr_note_placeholder: out_phones[:,:,7], self.next_note_placeholder: out_phones[:,:,8], self.note_context_placeholder: out_phones[:,:,9:],self.is_train: True}
+        for critic_itr in range(n_critic):
+            sess.run(self.dis_train_function, feed_dict = feed_dict)
+            sess.run(self.clip_discriminator_var_op, feed_dict = feed_dict)
+
+
+        _, final_loss, dis_loss = sess.run([self.final_train_function, self.final_loss, self.D_loss], feed_dict=feed_dict)
+
         summary_str = sess.run(self.summary, feed_dict=feed_dict)
 
-        return step_loss, summary_str
 
-    def validate_model(self, sess):
+        return final_loss, dis_loss, summary_str
+
+
+    def validate_model(self, out_feats, out_phones, out_back, sess):
         """
         Function to train the model for each epoch
         """
-        # feed_dict = {self.input_placeholder: ins, self.output_placeholder: outs, self.is_train: False}
-        #
-        # step_loss= sess.run(self.loss, feed_dict=feed_dict)
-        # summary_str = sess.run(self.summary, feed_dict=feed_dict)
-        # return step_loss, summary_str
-        val_list = config.val_list
-        start_index = randint(0,len(val_list)-(config.batches_per_epoch_val+1))
-        pre_scores = []
-        acc_scores = []
-        rec_scores = []
-        count = 0
-        for file_name in val_list[start_index:start_index+config.batches_per_epoch_val]:
-            pre, acc, rec = self.validate_file(file_name, sess)
-            pre_scores.append(pre)
-            acc_scores.append(acc)
-            rec_scores.append(rec)
-            count+=1
-            utils.progress(count, config.batches_per_epoch_val, suffix='validation done')
-        pre_score = np.array(pre_scores).mean()
-        acc_score = np.array(acc_scores).mean()
-        rec_score = np.array(rec_scores).mean()
-        return pre_score, acc_score, rec_score
+        # assert (np.argmax(singer_targs, axis = -1)<4).all()
+        feed_dict = {self.prev_placeholder:out_back[:,:,-2:-1], self.output_placeholder:out_feats[:,:,-2:-1], self.prev_phone_placeholder: out_phones[:,:,0], self.curr_phone_placeholder: out_phones[:,:,1],
+        self.next_phone_placeholder: out_phones[:,:,2], self.phone_context_placeholder: out_phones[:,:,3:6], self.prev_note_placeholder: out_phones[:,:,6]
+        , self.curr_note_placeholder: out_phones[:,:,7], self.next_note_placeholder: out_phones[:,:,8], self.note_context_placeholder: out_phones[:,:,9:],self.is_train: False}
 
-    def eval_all(self, file_name_csv):
-        sess = tf.Session()
-        self.load_model(sess, config.log_dir)
-        val_list = config.val_list
-        count = 0
-        scores = {}
-        for file_name in val_list:
-            file_score = self.test_file_all(file_name, sess)
-            if count == 0:
-                for key, value in file_score.items():
-                    scores[key] = [value]
-                scores['file_name'] = [file_name]
-            else:
-                for key, value in file_score.items():
-                    scores[key].append(value)
-                scores['file_name'].append(file_name)
+        final_loss, dis_loss = sess.run([self.final_loss, self.D_loss], feed_dict=feed_dict)
 
-                # import pdb;pdb.set_trace()
-            count += 1
-            utils.progress(count, len(val_list), suffix='validation done')
-        utils.save_scores_mir_eval(scores, file_name_csv)
-
-        return scores
+        summary_str = sess.run(self.summary, feed_dict=feed_dict)
 
 
-    def model(self):
-        """
-        The main model function, takes and returns tensors.
-        Defined in modules.
-
-        """
-        with tf.variable_scope('Model') as scope:
-            self.output_logits = DeepSalience(self.input_placeholder, self.is_train)
-            self.outputs = tf.nn.sigmoid(self.output_logits)
+        return final_loss, dis_loss, summary_str
 
 
-class Voc_Sep(Model):
 
-    def get_placeholders(self):
-        """
-        Returns the placeholders for the model. 
-        Depending on the mode, can return placeholders for either just the generator or both the generator and discriminator.
-        """
-
-        self.phoneme_labels = tf.placeholder(tf.int32, shape=(config.batch_size,config.max_phr_len),name='phoneme_placeholder')
-        self.phone_onehot_labels = tf.one_hot(indices=tf.cast(phoneme_labels, tf.int32), depth=len(config.phonemas))
-        self.f0_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size, config.max_phr_len, 360),name='f0_placeholder')
-        self.feats_placeholder = tf.placeholder(tf.float32, shape=(config.batch_size, config.max_phr_len, 64),name='feats_placeholder')
-        self.is_train = tf.placeholder(tf.bool, name="is_train")
-
-    def loss_function(self):
-        """
-        returns the loss function for the model, based on the mode. 
-        """
-        self.loss = tf.reduce_sum(tf.abs(self.output_logits - self.feats_placeholder))
-
-    def read_input_file(self, file_name):
+    def read_hdf5_file(self, file_name):
         """
         Function to read and process input file, given name and the synth_mode.
         Returns features for the file based on mode (0 for hdf5 file, 1 for wav file).
         Currently, only the HDF5 version is implemented.
         """
-        feat_file = h5py.File(config.feats_dir + file_name, 'r')
 
-        cqt = abs(feat_file['voc_cqt'][()])
+        stat_file = h5py.File('./stats.hdf5', mode='r')
+
+        max_feat = stat_file["feats_maximus"][()]
+        min_feat = stat_file["feats_minimus"][()]
+        stat_file.close()
+
+        feat_file = h5py.File(config.feats_dir + file_name)
+
+
+        feats = feat_file["world_feats"][()]
+
+        phones = feat_file["phonemes"][()]
+
+        notes = feat_file["notes"][()]
+
+        phones = np.concatenate([phones, notes], axis = -1)
+
+        f0 = feats[:,-2]
+
+        diff = np.diff(f0)
+
+        non_zeros = np.nonzero(diff)
+
+        # feats = feats[non_zeros[0][0]:non_zeros[0][-1]]
+
+        # feats = (feats - min_feat)/(max_feat-min_feat)
 
         feat_file.close()
 
-        return cqt
+        return feats, phones
 
 
-    def extract_part_from_file(self, file_name, part, sess):
+    def test_file_hdf5(self, file_name):
+        """
+        Function to extract multi pitch from file. Currently supports only HDF5 files.
+        """
+        sess = tf.Session()
+        self.load_model(sess, log_dir = config.log_dir)
+        feats, phones = self.read_hdf5_file(file_name)
 
-        parts = ['_soprano_', '_alto_', '_bass_', '_tenor_']
+        out_feats = self.process_file(phones, sess)
 
-        cqt = self.read_input_file(file_name)
-
-        song_name = file_name.split('_')[0]
-
-        voc_num = 9-part
-        voc_part = parts[part]
-        voc_track= file_name[-voc_num]
-
-        voc_feat_file = h5py.File(config.voc_feats_dir + song_name + voc_part + voc_track + '.wav.hdf5', 'r')
-
-        voc_feats = voc_feat_file["voc_feats"][()]
-
-        voc_feats[np.argwhere(np.isnan(voc_feats))] = 0.0
-
-        atb = voc_feat_file['atb'][()]
-
-        atb = atb[:, 1:]
-
-        atb[:, 0:4] = 0
-
-        atb = np.clip(atb, 0.0, 1.0)
-
-        max_len = min(len(voc_feats), len(cqt))
-
-        voc_feats = voc_feats[:max_len]
-
-        cqt = cqt[:max_len]
-
-        atb = atb[:max_len]
-
-        # voc_feats = (voc_feats - min_feat) / (max_feat - min_feat)
-        #
-        # voc_feats = np.clip(voc_feats[:, :, :-2], 0.0, 0.1)
-
-        # sig_process.feats_to_audio(voc_feats, 'booboo.wav')
-
-        in_batches_cqt, nchunks_in = utils.generate_overlapadd(cqt)
-
-        in_batches_atb, nchunks_in = utils.generate_overlapadd(atb)
-
-        # import pdb;pdb.set_trace()
-        out_batches_feats = []
-        for in_batch_cqt, in_batch_atb in zip(in_batches_cqt, in_batches_atb):
-            feed_dict = {self.input_placeholder: in_batch_cqt, self.f0_placeholder: in_batch_atb, self.is_train: False}
-            out_feat = sess.run(self.output_logits, feed_dict=feed_dict)
-            out_batches_feats.append(out_feat)
-
-
-        out_batches_feats = np.array(out_batches_feats)
-
-
-        out_feats = utils.overlapadd(out_batches_feats.reshape(out_batches_feats.shape[0], config.batch_size, config.max_phr_len, -1),
-                         nchunks_in)
-
-        out_feats = out_feats * (max_feat - min_feat) + min_feat
-
-        out_feats = out_feats[:max_len]
-
-        out_feats = np.concatenate((out_feats, voc_feats[:, -2:]), axis=-1)
-
-        plt.figure(1)
-        plt.subplot(211)
-        plt.imshow(voc_feats.T, origin = 'lower', aspect = 'auto')
-        plt.subplot(212)
-        plt.imshow(out_feats.T, origin='lower', aspect='auto')
-        plt.show()
-
-
-        sig_process.feats_to_audio(out_feats, 'extracted.wav')
-
+        self.plot_features(feats, out_feats)
 
         import pdb;pdb.set_trace()
 
-        # import pdb;pdb.set_trace()
+        out_featss = np.concatenate((out_feats[:feats.shape[0]], feats[:out_feats.shape[0],-2:]), axis = -1)
 
-    def extract_file(self, file_name, part):
-        sess = tf.Session()
-        self.load_model(sess, config.log_dir_sep)
-        self.extract_part_from_file(file_name, part, sess)
+        utils.feats_to_audio(out_featss,file_name[:-4]+'gan_op.wav') 
 
-    def train(self):
-        """
-        Function to train the model, and save Tensorboard summary, for N epochs. 
-        """
-        sess = tf.Session()
+    def plot_features(self, feats, out_feats):
 
+        plt.figure(1)
 
-        self.loss_function()
-        self.get_optimizers()
-        self.load_model(sess, config.log_dir_sep)
-        self.get_summary(sess, config.log_dir_sep)
-        start_epoch = int(sess.run(tf.train.get_global_step()) / (config.batches_per_epoch_train))
+        plt.plot(feats[:,-2])
+
+        plt.plot(out_feats)
 
 
-        print("Start from: %d" % start_epoch)
+        plt.show()
 
 
-        for epoch in range(start_epoch, config.num_epochs):
-            data_generator = sep_gen()
-            start_time = time.time()
+    def process_file(self, phones, sess):
+
+        stat_file = h5py.File('./stats.hdf5', mode='r')
+
+        max_feat = stat_file["feats_maximus"][()]
+        min_feat = stat_file["feats_minimus"][()]
+        stat_file.close()
 
 
-            batch_num = 0
-            epoch_train_loss = 0
+        # if len(voc_stft)>len(voc_stft_singer):
+        #     voc_stft = voc_stft[:len(voc_stft_singer)]
+        # else:
+        #     voc_stft_singer = voc_stft_singer[:len(voc_stft)]
+
+        num_batches = int(len(phones)/config.max_phr_len)
+        phones = np.tile(np.expand_dims(phones, 0), (config.batch_size,1,1))
+        
+        outputs = np.zeros((config.max_phr_len, 1))
+
+        for i in range(num_batches):
+            out_phones = phones[:,config.max_phr_len * i : config.max_phr_len *(i+1),:]
+            feed_dict = {self.prev_placeholder:np.tile(np.expand_dims(outputs[-config.max_phr_len:,:], 0), (config.batch_size,1,1)), self.prev_phone_placeholder: out_phones[:,:,0], self.curr_phone_placeholder: out_phones[:,:,1],
+            self.next_phone_placeholder: out_phones[:,:,2], self.phone_context_placeholder: out_phones[:,:,3:6], self.prev_note_placeholder: out_phones[:,:,6]
+            , self.curr_note_placeholder: out_phones[:,:,7], self.next_note_placeholder: out_phones[:,:,8], self.note_context_placeholder: out_phones[:,:,9:],self.is_train: True}
+            output = sess.run(self.output , feed_dict = feed_dict)
+            output = output[0, :, :]
+            outputs = np.concatenate((outputs, output), axis = 0)
+            utils.progress(i, num_batches, suffix = 'done')
 
 
-            with tf.variable_scope('Training'):
-                for ins, f0s, feats in data_generator:
+        outputs = outputs*(max_feat[-2] - min_feat[-2]) + min_feat[-2]
 
-                    step_loss, summary_str = self.train_model(ins, f0s, feats, sess)
-                    if np.isnan(step_loss):
-                        import pdb;pdb.set_trace()
-                    epoch_train_loss+=step_loss
+        return outputs
 
-                    self.train_summary_writer.add_summary(summary_str, epoch)
-                    self.train_summary_writer.flush()
-
-                    utils.progress(batch_num,config.batches_per_epoch_train, suffix = 'training done')
-
-                    batch_num+=1
-                    # import pdb;pdb.set_trace()
-
-                epoch_train_loss = epoch_train_loss/batch_num
-                print_dict = {"Training Loss": epoch_train_loss}
-
-            # if (epoch + 1) % config.validate_every == 0:
-                # pre, acc, rec = self.validate_model(sess)
-                # print_dict["Validation Precision"] = pre
-                # print_dict["Validation Accuracy"] = acc
-                # print_dict["Validation Recall"] = rec
-
-            end_time = time.time()
-            if (epoch + 1) % config.print_every == 0:
-                self.print_summary(print_dict, epoch, end_time-start_time)
-            if (epoch + 1) % config.save_every == 0 or (epoch + 1) == config.num_epochs:
-                self.save_model(sess, epoch+1, config.log_dir_sep)
-
-    def train_model(self, ins, f0s, feats, sess):
-        """
-        Function to train the model for each epoch
-        """
-        feed_dict = {self.input_placeholder: ins, self.f0_placeholder: f0s, self.feats_placeholder: feats, self.is_train: False}
-        _, step_loss= sess.run(
-            [self.train_function, self.loss], feed_dict=feed_dict)
-        summary_str = sess.run(self.summary, feed_dict=feed_dict)
-
-        return step_loss, summary_str
-
-    def validate_model(self, sess):
-        """
-        Function to train the model for each epoch
-        """
-        # feed_dict = {self.input_placeholder: ins, self.output_placeholder: outs, self.is_train: False}
-        #
-        # step_loss= sess.run(self.loss, feed_dict=feed_dict)
-        # summary_str = sess.run(self.summary, feed_dict=feed_dict)
-        # return step_loss, summary_str
-        val_list = config.val_list
-        start_index = randint(0,len(val_list)-(config.batches_per_epoch_val+1))
-        pre_scores = []
-        acc_scores = []
-        rec_scores = []
-        count = 0
-        for file_name in val_list[start_index:start_index+config.batches_per_epoch_val]:
-            pre, acc, rec = self.validate_file(file_name, sess)
-            pre_scores.append(pre)
-            acc_scores.append(acc)
-            rec_scores.append(rec)
-            count+=1
-            utils.progress(count, config.batches_per_epoch_val, suffix='validation done')
-        pre_score = np.array(pre_scores).mean()
-        acc_score = np.array(acc_scores).mean()
-        rec_score = np.array(rec_scores).mean()
-        return pre_score, acc_score, rec_score
-
-    def eval_all(self, file_name_csv):
-        sess = tf.Session()
-        self.load_model(sess)
-        val_list = config.val_list
-        count = 0
-        scores = {}
-        for file_name in val_list:
-            file_score = self.test_file_all(file_name, sess)
-            if count == 0:
-                for key, value in file_score.items():
-                    scores[key] = [value]
-                scores['file_name'] = [file_name]
-            else:
-                for key, value in file_score.items():
-                    scores[key].append(value)
-                scores['file_name'].append(file_name)
-
-                # import pdb;pdb.set_trace()
-            count += 1
-            utils.progress(count, len(val_list), suffix='validation done')
-        scores = pd.DataFrame.from_dict(scores)
-        scores.to_csv(file_name_csv)
-
-        return scores
 
 
     def model(self):
@@ -607,16 +408,28 @@ class Voc_Sep(Model):
         Defined in modules.
 
         """
-        with tf.variable_scope('Model') as scope:
-            self.output_logits = nr_wavenet(self.input_placeholder,self.f0_placeholder, self.is_train)
+
+        self.conditions = tf.concat([self.prev_note_onehot_labels, self.curr_note_onehot_labels, self.next_note_onehot_labels, self.note_context_placeholder,\
+                self.prev_phone_onehot_labels, self.curr_phone_onehot_labels, self.next_phone_onehot_labels, self.phone_context_placeholder], axis = -1)
+
+        with tf.variable_scope('Final_Model') as scope:
+            self.output = modules.full_network(self.prev_placeholder, self.conditions, self.is_train)
+            # self.output_decoded = tf.nn.sigmoid(self.output)
+            # self.output_wav_decoded = tf.nn.sigmoid(self.output_wav)
+        with tf.variable_scope('Discriminator') as scope: 
+            self.D_real = modules.discriminator((self.output_placeholder-0.5)*2, self.prev_placeholder, self.conditions, self.is_train)
+            scope.reuse_variables()
+            self.D_fake = modules.discriminator(self.output, self.prev_placeholder, self.conditions, self.is_train)
+
+
 
 def test():
     # model = DeepSal()
     # # model.test_file('nino_4424.hdf5')
     # model.test_wav_folder('./helena_test_set/', './results/')
 
-    model = Voc_Sep()
-    model.extract_file('locus_0024.hdf5', 3)
+    model = MultiSynth()
+    model.train()
 
 if __name__ == '__main__':
     test()

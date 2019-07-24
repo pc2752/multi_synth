@@ -4,7 +4,41 @@ import vamp
 import re
 import matplotlib.pyplot as plt
 
+
+from scipy.stats import norm
+
 import config
+
+def coarse_code(x):
+    """Coarse-code value to finite number of states, each with a Gaussian response.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector of normalized values [0.0;1.0], shape (nframes,).
+    n_states : int
+        Number of states to use for coase coding.
+    sigma : float
+        Sigma (scale, standard deviation) parameter of normal distribution 
+        used internally to perform coarse coding. Default: 0.4
+
+    Returns
+    -------
+    ndarray
+        Matrix of shape (nframes, n_states).
+
+    See also
+    --------
+    https://en.wikipedia.org/wiki/Neural_coding#Position_coding
+    https://plus.google.com/+IlyaEdrenkin/posts/B55jf3wUBvD
+    https://github.com/CSTR-Edinburgh/merlin/blob/master/src/frontend/label_normalisation.py
+    """
+    n_states = 3
+    sigma = 0.4
+    assert np.all(x >= 0.0) and np.all(x <= 1.0), 'expected input to be normalized in range [0;1]'
+    mu = np.linspace(0.0, 1.0, num=n_states, endpoint=True)
+    return np.hstack([norm.pdf(x, mu_k, sigma).reshape((-1, 1)) for mu_k in mu]) 
+
 
 def note_str_to_num(note, base_octave=-1):
     """Convert note pitch as string to MIDI note number."""
@@ -74,15 +108,24 @@ def process_lab_file(filename, stft_len):
         phonemes.append([st,en,phonote])
 
 
-    strings_p = np.zeros((phonemes[-1][1],2))
+    strings_p = np.zeros((phonemes[-1][1],6))
+
+    prev = config.phonemas.index('sil')
 
     for i in range(len(phonemes)):
         pho=phonemes[i]
+        if not i == len(phonemes)-1:
+            npho = phonemes[i+1]
+            next_pho = config.phonemas.index(npho[2])
+        else:
+            next_pho = config.phonemas.index('sil')
         value = config.phonemas.index(pho[2])
-        context = np.linspace(0.0,1.0, len(strings_p[pho[0]:pho[1]+1,0]))
-        strings_p[pho[0]:pho[1]+1,0] = value
-        strings_p[pho[0]:pho[1]+1,1] = context
-    # import pdb;pdb.set_trace()
+        context = coarse_code(np.linspace(0.0,1.0, len(strings_p[pho[0]:pho[1]+1,0])))
+        strings_p[pho[0]:pho[1]+1,0] = prev
+        prev = value
+        strings_p[pho[0]:pho[1]+1,1] = value
+        strings_p[pho[0]:pho[1]+1,2] = next_pho
+        strings_p[pho[0]:pho[1]+1,3:] = context
 
     return strings_p
 
@@ -110,16 +153,27 @@ def process_notes_file(filename, stft_len):
         #     phonote='sil'
         phonemes.append([st,en,note_num, combo])
 
-    strings_p = np.zeros((phonemes[-1][1],2))
+    strings_p = np.zeros((phonemes[-1][1],6))
     strings_c = np.zeros((phonemes[-1][1],6))
 
+    prev = 0
+
     for i in range(len(phonemes)):
+        if not i == len(phonemes)-1:
+            npho = phonemes[i+1]
+            next_pho = config.notes.index(npho[2])
+        else:
+            next_pho = 0
         pho=phonemes[i]
         value = config.notes.index(pho[2])
+
         
-        context = np.linspace(0.0,1.0, len(strings_p[pho[0]:pho[1]+1,0]))
-        strings_p[pho[0]:pho[1]+1] = value
+        context = coarse_code(np.linspace(0.0,1.0, len(strings_p[pho[0]:pho[1]+1,0])))
+        strings_p[pho[0]:pho[1]+1, 1] = value
+        strings_p[pho[0]:pho[1]+1, 0] = prev
+        strings_p[pho[0]:pho[1]+1, 2] = next_pho
         for j, p in enumerate(pho[3].split('-')):
             strings_c[pho[0]:pho[1] + 1, j+1] = config.phonemas.index(p)+1
-        strings_p[pho[0]:pho[1]+1,1] = context
+        strings_p[pho[0]:pho[1]+1,3:] = context
+        prev = value
     return strings_p, strings_c.reshape(-1,6)
